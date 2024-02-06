@@ -8,9 +8,9 @@ program gillespie
 use kind_parameters
 implicit none
 
-! == System parameters ==
+! System parameters ====================================================
 integer, dimension(2), parameter :: burst = [1, 1]	! Size of burst for [x0, x1]
-real(dp), parameter :: beta = 2.0_dp	! x0 production rate
+real(dp), parameter :: beta = 1.0_dp	! x0 production rate
 real(dp), parameter :: alpha = 1.0_dp	! x1 production rate constant
 real(dp), parameter, dimension(2) :: decay = [1.0_dp, 1.0_dp]	! Decay rates
 integer, parameter, dimension(4,2) :: abund_update = &	! Abundance update matrix
@@ -19,53 +19,74 @@ integer, parameter, dimension(4,2) :: abund_update = &	! Abundance update matrix
 			0, burst(2), &
 			0, -1/), shape(abund_update))
 
-! == Program hyperparameters ==
-real(dp), parameter :: tmax = 10._dp	! When we want to stop
+! Program hyperparameters ==============================================
+integer, parameter :: dmax = 10**0	! When we want to stop
 character(*), parameter :: f_abund = "abundance.dat"	! File for abundances
 character(*), parameter :: f_prop = "propensity.dat"	! File for propensities
 
-! == Other variables ==
+! Other variables ======================================================
 integer, dimension(2) :: abund = [0, 0]	!	(Initial) abundances
 real(dp), dimension(4) :: propensity = 0._dp	! The rates, but with a fancy name
-real(dp) :: time = 0._dp
+real(dp) :: time = 0._dp, dt
+real(dp), dimension(2, 100) :: probx = 0._dp
 real(dp), allocatable :: t(:), r(:,:)	! Array for time and rates
 integer, allocatable :: x(:,:)	! Arrays for abundances
-integer :: steps, i, io1, io2
+integer :: steps=0, ndecay(2)=0, i, io1, io2, event
 
 
+! ======================================================================
 call random_seed()	! Initialize random seed. Later it might be useful to use the Numerical Recipes version?
 
-steps = 0
-! Open file to hold abundances
+! Open file to hold abundances and rates
 open(newunit=io1, file=f_abund, action="write")
 open(newunit=io2, file=f_prop, action="write")
 
-do while (time < tmax)
+do while (minval(ndecay) < dmax)
 	write(io1,*) time, abund
 	write(io2,*) time, propensity
 	! Do gillespie algorithm
-	call gillespie_iter(abund, time)
+	call gillespie_iter(abund, dt, event)
+	time = time + dt
+	! If we performed a decay step, add it to the counter.
+	if (event == 3 .or. event == 4) then
+		ndecay(event-2) = ndecay(event-2) + 1
+	end if
+	! Add the time step to whatever the current abundances are.
+	do i = 1,2
+		probx(i,abund(i)+1) = probx(i,abund(i)+1) + dt
+	end do
+	abund = abund + abund_update(event,:)
 	steps = steps + 1
 end do
 ! Take care of last loop iteration where we go over tmax.
-write(io1,*) time, abund
-write(io2,*) time, propensity
-close(io1)
-close(io2)
-
+write(io1,*) time, abund;	close(io1)
+write(io2,*) time, propensity;	close(io2)
 steps = steps + 1
 
-! Fill allocatable arrays with data we just generated
+probx = probx / time
+write(*,*) sum(probx)
+
+do i = 1, 100
+	write(1,*) i-1, probx(1,i), probx(2,i)
+end do
+
+! Fill allocatable arrays with data we just generated.
 call get_allocatable(steps)
 
-! Make the covariance matrix
-call covariance_matrix(steps, x(:,1), x(:,2))
-
+! Make the covariance matrix.
+call covariance_matrix(x(:,1), x(:,2), steps)
 
 
 contains !==============================================================
 
 
+function covariance(x, y, n) result(cov)
+	real(dp), dimension(n), intent(in) :: x, y
+	integer, intent(in) :: n
+	real(dp) :: cov
+	
+	cov = 1._dp * (sum(x*y) - sum(x)*sum(y)/n) / n
+end function
 
 subroutine get_allocatable(n)
 	integer, intent(in) :: n
@@ -87,7 +108,7 @@ subroutine get_allocatable(n)
 end subroutine
 
 
-subroutine covariance_matrix(n, x, y)
+subroutine covariance_matrix(x, y, n)
 	integer, intent(in) :: n
 	integer, dimension(n), intent(in) :: x, y
 	real(dp) :: cov(2,2)
@@ -108,19 +129,18 @@ end subroutine
 
 ! Run one step of the Gillespie algorithm: update the propensities, take
 ! a time step, get the reaction, update abundances. 
-subroutine gillespie_iter(x, t)
-	real(dp), intent(inout) :: t
+subroutine gillespie_iter(x, tstep, i)
+	real(dp), intent(out) :: tstep
 	integer, intent(inout) :: x(2)
-	integer :: i
-	real(dp) :: psum, propsum, roll, dt
+	integer, intent(out) :: i
+	real(dp) :: psum, propsum, roll
 
 	! Update propensity
 	call update_propensity(x)
 	propsum = sum(propensity)
 	
 	! Update time
-	call random_exp(1./propsum, dt)
-	t = t + dt
+	call random_exp(1./propsum, tstep)
 	
 	! Get reaction
 	call random_number(roll)
@@ -132,7 +152,7 @@ subroutine gillespie_iter(x, t)
 	end do
 	
 	! Update abundances
-	x = x + abund_update(i,:)
+	! x = x + abund_update(i,:)
 end subroutine
 
 
