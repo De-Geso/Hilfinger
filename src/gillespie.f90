@@ -3,24 +3,25 @@ program gillespie
 ! algorithm. Imagine a feedback control system. mRNA is produced, which
 ! triggers the production of a Protein. Both decay at some rate which
 ! depends on their abundance.
-! x0 == R >> x0 + a			x1 == alpha x0 >> x1 + b
+! x0 == alpha >> x0 + a			x1 == beta x0 >> x1 + b
 ! x0 == x0/tau1 >> x0 - 1	x1 == x1/tau1 >> x1 - 1
 use kind_parameters
 implicit none
 
 ! System parameters ====================================================
 integer, dimension(2), parameter :: burst = [1, 1]	! Size of burst for [x0, x1]
-real(dp), parameter :: beta = 1.0_dp	! x0 production rate
-real(dp), parameter :: alpha = 1.0_dp	! x1 production rate constant
+real(dp), parameter :: alpha = 1.0_dp	! x0 production rate
+real(dp), parameter :: beta = 1.0_dp	! x1 production rate constant
 real(dp), parameter, dimension(2) :: decay = [1.0_dp, 1.0_dp]	! Decay rates
 integer, parameter, dimension(4,2) :: abund_update = &	! Abundance update matrix
 	reshape((/burst(1), 0, &
 			-1, 0, &
 			0, burst(2), &
-			0, -1/), shape(abund_update))
+			0, -1/), shape(abund_update), order=[2,1])
 
 ! Program hyperparameters ==============================================
-integer, parameter :: dmax = 10**0	! When we want to stop
+integer, parameter :: dmax = 10**3	! When we want to stop
+integer, parameter :: abund_max = 10**2
 character(*), parameter :: f_abund = "abundance.dat"	! File for abundances
 character(*), parameter :: f_prop = "propensity.dat"	! File for propensities
 
@@ -28,7 +29,7 @@ character(*), parameter :: f_prop = "propensity.dat"	! File for propensities
 integer, dimension(2) :: abund = [0, 0]	!	(Initial) abundances
 real(dp), dimension(4) :: propensity = 0._dp	! The rates, but with a fancy name
 real(dp) :: time = 0._dp, dt
-real(dp), dimension(2, 100) :: probx = 0._dp
+real(dp), dimension(2, abund_max) :: probx = 0._dp
 real(dp), allocatable :: t(:), r(:,:)	! Array for time and rates
 integer, allocatable :: x(:,:)	! Arrays for abundances
 integer :: steps=0, ndecay(2)=0, i, io1, io2, event
@@ -48,8 +49,8 @@ do while (minval(ndecay) < dmax)
 	call gillespie_iter(abund, dt, event)
 	time = time + dt
 	! If we performed a decay step, add it to the counter.
-	if (event == 3 .or. event == 4) then
-		ndecay(event-2) = ndecay(event-2) + 1
+	if (event == 2 .or. event == 4) then
+		ndecay(event/2) = ndecay(event/2) + 1
 	end if
 	! Add the time step to whatever the current abundances are.
 	do i = 1,2
@@ -66,18 +67,56 @@ steps = steps + 1
 probx = probx / time
 write(*,*) sum(probx)
 
-do i = 1, 100
+do i = 1, abund_max
 	write(1,*) i-1, probx(1,i), probx(2,i)
 end do
 
+call checks(probx)
+
 ! Fill allocatable arrays with data we just generated.
-call get_allocatable(steps)
+! call get_allocatable(steps)
 
 ! Make the covariance matrix.
-call covariance_matrix(x(:,1), x(:,2), steps)
+! call covariance_matrix(x(:,1), x(:,2), steps)
 
 
 contains !==============================================================
+
+
+subroutine checks(p)
+	real(dp), dimension(2, abund_max), intent(in) :: p
+	real(dp) :: mean(2), covar(2,2)=0.
+	integer i, j, k, l
+	
+	do i = 1, abund_max
+		mean(:) = 1._dp * (mean(:) + (i-1.) * p(:,i))
+	end do
+	write(*,*) 'Theory mean: ', alpha/decay(1), mean(1)*beta/decay(2)
+	write(*,*) 'Sim mean: ', mean
+	
+	do i = 1, 2
+	do j = 1, 2
+		do k = 1, abund_max
+			if (i /= j) then
+				do l = 1, abund_max
+					covar(i,j) = covar(i,j) + p(i,k)*p(j,l)*((k-1.)-mean(i))*((l-1.)-mean(j))
+				end do
+			else
+				covar(i,j) = 1._dp * covar(i,j) + p(i,k) * ((k-1.)-mean(i))**2
+			end if
+		end do
+		! covar(i,j) = 1._dp * covar(i,j) / (mean(1)*mean(2))
+	end do
+	end do
+	
+	write(*,*) 'Theory covar: ', &
+		1./mean(1) * decay(2)/sum(decay), &
+		1./mean(1) * decay(2)/sum(decay), &
+		1./mean(2) + 1./mean(1) * decay(2)/sum(decay)
+	write(*,*) 'Sim covar: ', covar(1,2), covar(2,1), covar(2,2)
+	
+	
+end subroutine
 
 
 function covariance(x, y, n) result(cov)
@@ -160,9 +199,9 @@ end subroutine
 subroutine update_propensity(x)
 	integer, intent(in) :: x(2)
 	
-	propensity(1) = beta		! Make x0 (mRNA)
+	propensity(1) = alpha		! Make x0 (mRNA)
 	propensity(2) = x(1)*decay(1)	! Degrade x0 (mRNA)
-	propensity(3) = alpha*x(1)	! Make x1 (Protein)
+	propensity(3) = beta*x(1)	! Make x1 (Protein)
 	propensity(4) = x(2)*decay(2)	! Degrade x1 (Protein)
 end subroutine
 
