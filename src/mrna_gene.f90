@@ -8,7 +8,7 @@ implicit none
 ! Number of decay events before stopping
 integer, parameter :: decay_min = 10**6
 ! Maximum abundances, pad this.
-integer, parameter :: abund_max = 2**4
+integer, parameter :: abund_max = 2**5
 
 ! Parameters
 ! ======================================================================
@@ -19,7 +19,7 @@ real(dp), parameter :: alpha = 1.0
 ! x2 production rate
 real(dp), parameter :: beta = 1.0
 ! Decay rates
-real(dp), parameter, dimension(2) :: decay = [1.0, 10.0]
+real(dp), parameter, dimension(2) :: decay = [1.0, 1.0]
 ! Abundance update matrix.
 integer, parameter, dimension(2,4) :: abund_update = &
 	reshape((/burst(1), 0, &
@@ -34,7 +34,7 @@ real(dp), dimension(4) :: propensity = 0.0
 ! (initial) Abundances of each species, number of decay events for each species
 integer, dimension(2) :: x = [0, 0], ndecay = [0, 0]
 ! Probability matrix
-real(dp) :: prob_cond(abund_max, abund_max), prob(2, abund_max)
+real(dp) :: prob_cond(abund_max, abund_max)
 
 integer :: i, event
 real(dp) :: t
@@ -43,7 +43,6 @@ real(dp) :: t
 call random_seed()
 
 prob_cond = 0._dp
-prob = 0._dp
 
 
 do while (minval(ndecay) < decay_min)
@@ -71,14 +70,7 @@ end do
 ! Normalize probability
 prob_cond = prob_cond / sum(prob_cond)
 
-! Create probability distributions for x1 and x2
-do i = 1, abund_max
-	prob(1,i) = sum(prob_cond(i,:))
-	prob(2,i) = sum(prob_cond(:,i))
-end do
-
-write(*,*) prob(:,1)
-write(*,*) prob(:,2)
+call checks(prob_cond)
 
 
 contains
@@ -86,12 +78,12 @@ contains
 
 subroutine checks(pij)
 	real(dp), dimension(abund_max, abund_max), intent(in) :: pij
-	real(dp), dimension(1, abund_max) :: p
+	real(dp), dimension(2, abund_max) :: p
 	real(dp) :: mean(2)=0.
 	integer labels(abund_max), i
 	
 	! Create probability distributions for x1 and x2 from joint
-	! probability distribution
+	! probability distribution, create labels while we're at it.
 	do i = 1, abund_max
 		! Create labels
 		labels(i) = i-1
@@ -99,7 +91,9 @@ subroutine checks(pij)
 		p(2,i) = sum(pij(:,i))
 	end do
 	
-	mean = matmul(weights, p)
+	mean = matmul(p, labels)
+	write(*,*) "Theoretical mean: ", alpha/decay(1), alpha*beta/(decay(1)*decay(2))
+	write(*,*) "Simulation mean: ", mean(1), mean(2)
 	
 	
 
