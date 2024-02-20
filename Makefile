@@ -6,36 +6,40 @@ MAKEFLAGS += --no-builtin-rules --no-builtin-variables
 # Configuration settings
 FC := gfortran
 LD := $(FC)
-FFLAGS := -O2
+FFLAGS := -O3
 LDFLAGS := $(FCFLAGS)
 RM := rm -f
 
 # List of all source files
 PATHIN := src/
-PATHOUT:= bin/
+BINDIR:= bin/
 NAMES := mrna_gene.f90 \
-	kind_parameters.f90
-SRCS := $(addprefix $(PATHIN), $(NAMES))
+	kind_parameters.f90 \
+	init_mrna_gene.f90
 
 # Create lists of the build artefacts in this project
+SRCS := $(addprefix $(PATHIN), $(NAMES))
 OBJS := $(addsuffix .o, $(SRCS))
 
 # Declare all public targets
 .PHONY: all clean
+
 all: mrna_gene
 
 mrna_gene: $(OBJS)
 	$(LD) $(LDFLAGS) -o $@ $^
 
 $(OBJS): %.o: %
-	$(FC) -c -o $@ $<
+	$(FC) -c -J$(BINDIR) -o $@ $<
 
 # define dependencies between object files
-src/mrna_gene.f90.o: src/kind_parameters.f90.o
+src/mrna_gene.f90.o: src/kind_parameters.f90.o src/init_mrna_gene.f90.o
+
+src/init_mrna_gene.f90.o: src/kind_parameters.f90.o
 
 # rebuild all object files in case this Makefile changes
-#$(OBJS): $(MAKEFILE_LIST)
+$(OBJS): $(MAKEFILE_LIST)
 
 # Cleanup, filter to avoid removing source code by accident
 clean:
-	$(RM) $(filter %.o, $(OBJS) $(filter %.exe, $(TEST_EXE)) $(LIB) $(wildcard *.mod)
+	$(RM) $(filter %.o, $(OBJS)) $(wildcard *.mod)
