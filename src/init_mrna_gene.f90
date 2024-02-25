@@ -9,7 +9,7 @@ public
 ! Number of decay events before stopping
 integer, parameter :: decay_min = 10**6
 ! Maximum abundances, pad this.
-integer, parameter :: abund_max = 2**5
+integer, parameter :: abund_max = 2**8
 
 ! Parameters
 ! ======================================================================
@@ -43,6 +43,6 @@ real(dp) :: prob_abund(abund_max, abund_max)
 real(dp) :: prob_rate(abund_max)
 integer :: i, event, io
 real(dp) :: t
-character(*), parameter :: fout = "mrna_data.dat"
+character(*), parameter :: fout = "mrna_accum.dat"
 
 end module init_mrna_gene
