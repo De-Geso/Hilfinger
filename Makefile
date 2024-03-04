@@ -44,6 +44,9 @@ src/randf.f90.o: src/kind_parameters.f90.o
 # rebuild all object files in case this Makefile changes
 $(OBJS): $(MAKEFILE_LIST)
 
+run:
+	./
+
 # Cleanup, filter to avoid removing source code by accident
 clean:
 	$(RM) $(filter %.o, $(OBJS)) $(wildcard *.mod)

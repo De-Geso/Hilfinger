@@ -2,56 +2,9 @@ program mrna_gean
 use kind_parameters
 ! use init_mrna_gene
 use randf
+use init_mrna_gene
 implicit none
 include "fftw3.f"
-
-! Hyperparameters
-! ======================================================================
-real(dp), parameter :: pi = 4.D0*DATAN(1.D0)
-! Number of decay events before stopping.
-integer, parameter :: decay_min = 10**6
-! Maximum abundances. Program will exit if this is exceeded.
-integer, parameter :: abund_max = 2**8
-! Number of abundance updates to remember for autocovariance.
-integer, parameter :: nrec = 2**5
-!! Length of correlation in memory.
-! integer, parameter :: corr = 10**2
-
-! Parameters
-! ======================================================================
-! Size of burst for [x0, x1]
-integer, parameter, dimension(2) :: burst = [1, 1]
-! x1 production rate
-real(dp) :: alpha = 1._dp
-! x2 production rate
-real(dp) :: beta = 1._dp
-! Decay rates
-real(dp), dimension(2) :: tau = [1._dp, 1._dp]
-! Hill function parameters
-real(dp) :: k = 1._dp
-real(dp) :: n = 1._dp
-! Abundance update matrix.
-integer, parameter, dimension(2,4) :: abund_update = &
-	reshape((/burst(1), 0, &
-			-1, 0, &
-			0, burst(2), &
-			0, -1/), shape(abund_update))
-
-! Variables
-! ======================================================================
-! Propensity of each event
-real(dp), dimension(4) :: propensity = 0.0
-! Abundances of each species, number of decay events for each species
-integer, dimension(2) :: x = [0, 0], ndecay = [0, 0]
-! Probability matrix
-real(dp), dimension(abund_max, abund_max) :: prob_cond
-real(dp), dimension(2, abund_max) :: prob
-real(dp) :: prob_rate(abund_max)
-character(*), parameter :: fout = "mrna_accum.dat"
-integer, dimension(2, nrec) :: xrec = 0
-real(dp), dimension(nrec) :: trec = 0._dp
-integer :: i, event, io
-real(dp) :: t, dtmin=1.0
 
 ! Program begins
 ! ======================================================================
@@ -62,27 +15,37 @@ call random_seed()
 ! call random_uniform(tau(1), 0.1_dp, 1._dp)
 ! call random_uniform(tau(2), 0.1_dp, 1._dp)
 
-! write(*,*) alpha, beta, tau
-
 open(newunit=io, file=fout, position="append", action="write")
 write(io, "(4f20.14)", advance="no") alpha, beta, tau
 
 prob_cond = 0._dp
 prob_rate = 0._dp
 
+t = 0._dp
+acorr_mean = 0._dp
+
 do while (minval(ndecay) < decay_min)
-	! If we go over maximum abundance, crash.
+	! If we go over maximum abundance, stop.
 	if (maxval(x) >= abund_max) then
 		write(*,*) "Maximum abundance exceeded."
 		call exit()
 	end if
 
 	! Get time step and event from Gillespie algorithm
-	call gillespie_iter(x, t, event)
+	call gillespie_iter(x, tstep, event)
+	t = t + tstep
+	
+	! Track the abundances and time in a window for correlations.
+	xtail(:,:ntail-1) = xtail(:,2:ntail)
+	xtail(:,ntail) = x(:)
+	ttail(:ntail-1) = ttail(2:ntail)
+	ttail(ntail) = t
+	
+	call update_autocorr(acorr, xtail, ttail, acorr_mean, tstep, acorr_tstep)
 
 	! Add time step to probability matrices
-	prob_cond(x(1)+1, x(2)+1) = prob_cond(x(1)+1, x(2)+1) + t
-	prob_rate(x(2)+1) = prob_rate(x(2)+1) + t
+	prob_cond(x(1)+1, x(2)+1) = prob_cond(x(1)+1, x(2)+1) + tstep
+	prob_rate(x(2)+1) = prob_rate(x(2)+1) + tstep
 	
 	! Update abundances
 	x = x + abund_update(:,event)
@@ -91,70 +54,123 @@ do while (minval(ndecay) < decay_min)
 	if (event .eq. 2 .or. event .eq. 4) then
 		ndecay(event/2) = ndecay(event/2) + 1
 	end if
-	
-	! If we're getting close to the end of the simulation start tracking
-	! the abundances for autocorrelation.
-	if (minval(ndecay) > decay_min - nrec) then
-		if (t .lt. dtmin) dtmin = t
-		xrec(:,:nrec-1) = xrec(:,2:nrec)
-		xrec(:,nrec) = x(:)
-		trec(:nrec-1) = trec(2:nrec)
-		trec(nrec) = trec(nrec-1) + t
-	end if
 end do
-! Shift our time series so that our record is at t=0
-trec = trec - trec(1)
 
-! do i = 1, nrec
-!	write(*,*) trec(i), xrec(:,i)
-! end do
+! Don't know total time until end.
+acorr = acorr / t
+acorr_mean = acorr_mean / t
+write(*,*) acorr(2), acorr_mean(2), acorr_mean(1)
+
+do i = 1, acorr_n
+	acorr(i) = (acorr(i) - acorr_mean(i)*acorr_mean(1))
+end do
+
+! This LOOKS like cheating, but it's actaully not. acoor(1) is exactly
+! the normalization
+acorr = acorr / acorr(1)
+
+do i = 1, acorr_n
+	t = (i-1)*acorr_tstep
+	write(2,*) t, acorr(i), exp(-t/tau(1))
+end do
+
+
 
 ! Normalize probability
 prob_rate = prob_rate / sum(prob_rate)
 prob_cond = prob_cond / sum(prob_cond)
 
-call autocorr_wiener_khinchin(trec, xrec(1,:), ceiling(trec(nrec)/dtmin))
-! call checks(prob_cond)
+call checks(prob_cond)
 close(io)
 
 
+! Functions and Subroutines ============================================
 contains
 
 
-subroutine autocorr_wiener_khinchin(tin, xin, n)
-	real(dp), dimension(:), intent(in) :: tin
-	integer, dimension(:), intent(in) :: xin
-	integer, intent(in) :: n
-	real(dp) :: x(n), Sxx(n), corr(n)
-	complex(8), dimension(n) :: xout
-	integer :: i, tindex
-	real(dp) :: t, dt
-	integer*8 :: plan
+subroutine update_autocorr(acorr, xvec, tvec, mean, tint, dt)
+	integer, intent(in) :: xvec(2, ntail)
+	real(dp), intent(in) :: tvec(ntail), tint, dt
+	real(dp), intent(inout) :: acorr(acorr_n), mean(acorr_n)
+	real(dp) :: t, ta, tb
+	integer :: i, j, ti, tai, tbi
 	
-	dt = maxval(tin)/(n-1.)
+	! Crash if we aren't carrying enough information around
+	if (tvec(ntail)-tvec(1) < lag_max .and. tvec(1) /= 0.) then
+		write(*,*) tvec(ntail)-tvec(1)
+		write(*,*) "Error in update_autocorr: Maximum lag larger than recorded time."
+		call exit()
+	end if
 	
-	do i = 1, n
-		t = (i-1.)*dt
-		tindex = maxloc(tin, dim=1, mask=tin-t .lt. 1E-12)
-		x(i) = xin(tindex)! * sin(pi*(i-1)/(n-1))**2
-!		write(*,*) t, tin(tindex), x(i)
+	! For the leading edge (no lag) we always take exactly one step.
+	mean(1) = mean(1) + xvec(1,ntail) * tint
+	acorr(1) = acorr(1) + xvec(1,ntail)**2 * tint
+	
+	do i = 2, acorr_n
+		! For points with lag, we have to check some things.
+		tb = tvec(ntail) - i*dt
+		ta = tb - tint
+		t = ta
+		! Most recent points smaller than ta and tb
+		tai = maxloc(tvec, dim=1, mask=ta-tvec .gt. 0.)
+		tbi = maxloc(tvec, dim=1, mask=tb-tvec .gt. 0.)
+		if (tai == tbi) then
+			acorr(i) = acorr(i) + xvec(1,tai)*xvec(1,ntail) * tint
+			mean(i) = mean(i) + xvec(1,tai) * tint
+		else
+			! ta side
+			acorr(i) = acorr(i) + xvec(1,tai)*xvec(1,ntail) * (tvec(tai+1)-ta)
+			mean(i) = mean(i) + xvec(1,tai) * (tvec(tai+1)-ta)
+			! tb side
+			acorr(i) = acorr(i) + xvec(1,tbi+1)*xvec(1,ntail) * (tb-tvec(tbi))
+			mean(i) = mean(i) + xvec(1,tbi+1) * (tb-tvec(tbi))
+			
+			! integrate from ta to tb
+			do j = tai+1, tbi-1
+				acorr(i) = acorr(i) + xvec(1,j+1)*xvec(1,ntail) * (tvec(j+1)-tvec(j))
+				mean(i) = mean(i) + xvec(1,j+1) * (tvec(j+1)-tvec(j))
+			end do
+		end if	
 	end do
-	
-	call dfftw_plan_dft_r2c_1d(plan, n, x, xout, FFTW_ESTIMATE)
-	call dfftw_execute_dft_r2c(plan, x, xout)
-	call dfftw_destroy_plan(plan)
-	Sxx = abs(xout)
-	call dfftw_plan_dft_r2c_1d(plan, n, Sxx, xout, FFTW_ESTIMATE)
-	call dfftw_execute_dft_r2c(plan, Sxx, xout)
-	call dfftw_destroy_plan(plan)
-	
-	corr = abs(xout)
-	
-	do i = 1, n/2
-		write(1,*) i/dt/n, Sxx(i), corr(i)
-	end do
-	
 end subroutine
+
+
+!subroutine autocorr_wiener_khinchin(tin, xin, n)
+!	real(dp), dimension(:), intent(in) :: tin
+!	integer, dimension(:), intent(in) :: xin
+!	integer, intent(in) :: n
+!	real(dp) :: x(n), Sxx(n), corr(n)
+!	complex(8), dimension(n) :: xout
+!	integer :: i, tindex
+!	real(dp) :: t, dt
+!	integer*8 :: plan
+	
+!	dt = maxval(tin)/(n-1.)
+	
+!	do i = 1, n
+!		t = (i-1.)*dt
+!		tindex = maxloc(tin, dim=1, mask=tin-t .lt. 1E-12)
+!		! x(i) = xin(tindex)
+!		x(i) = xin(tindex) * sin(pi*(i-1)/(n-1))**2
+!		! write(*,*) t, tin(tindex), x(i), xin(tindex)
+!	end do
+	
+!	call dfftw_plan_dft_r2c_1d(plan, n, x, xout, FFTW_ESTIMATE)
+!	call dfftw_execute_dft_r2c(plan, x, xout)
+!	call dfftw_destroy_plan(plan)
+!	Sxx = abs(xout)
+	
+!	call dfftw_plan_dft_1d(plan, n/2, Sxx, corr, FFTW_BACKWARD, FFTW_ESTIMATE)
+!	call dfftw_execute_dft(plan, Sxx, corr)
+!	call dfftw_destroy_plan(plan)
+	
+!	corr = corr/maxval(corr)
+	
+!	do i = 1, n/2
+!		write(1,*) i*dt, Sxx(i), corr(i), exp(-i*dt/tau(1))
+!	end do
+	
+!end subroutine
 
 
 subroutine checks(pij)
