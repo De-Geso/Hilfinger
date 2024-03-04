@@ -80,7 +80,7 @@ end do
 prob_rate = prob_rate / sum(prob_rate)
 prob_cond = prob_cond / sum(prob_cond)
 
-call checks(prob_cond)
+! call checks(prob_cond)
 close(io)
 
 
@@ -115,19 +115,19 @@ subroutine update_autocorr(acorr, xvec, tvec, mean, tint, dt)
 		tai = maxloc(tvec, dim=1, mask=ta-tvec .gt. 0.)
 		tbi = maxloc(tvec, dim=1, mask=tb-tvec .gt. 0.)
 		if (tai == tbi) then
-			acorr(i) = acorr(i) + xvec(1,tai)*xvec(1,ntail) * tint
-			mean(i) = mean(i) + xvec(1,tai) * tint
+			acorr(i) = acorr(i) + xvec(1,tai+1) * xvec(1,ntail) * tint
+			mean(i) = mean(i) + xvec(1,tai+1) * tint
 		else
 			! ta side
-			acorr(i) = acorr(i) + xvec(1,tai)*xvec(1,ntail) * (tvec(tai+1)-ta)
-			mean(i) = mean(i) + xvec(1,tai) * (tvec(tai+1)-ta)
+			acorr(i) = acorr(i) + xvec(1,tai+1) * xvec(1,ntail) * (tvec(tai+1)-ta)
+			mean(i) = mean(i) + xvec(1,tai+1) * (tvec(tai+1)-ta)
 			! tb side
-			acorr(i) = acorr(i) + xvec(1,tbi+1)*xvec(1,ntail) * (tb-tvec(tbi))
+			acorr(i) = acorr(i) + xvec(1,tbi+1) * xvec(1,ntail) * (tb-tvec(tbi))
 			mean(i) = mean(i) + xvec(1,tbi+1) * (tb-tvec(tbi))
 			
 			! integrate from ta to tb
 			do j = tai+1, tbi-1
-				acorr(i) = acorr(i) + xvec(1,j+1)*xvec(1,ntail) * (tvec(j+1)-tvec(j))
+				acorr(i) = acorr(i) + xvec(1,j+1) * xvec(1,ntail) * (tvec(j+1)-tvec(j))
 				mean(i) = mean(i) + xvec(1,j+1) * (tvec(j+1)-tvec(j))
 			end do
 		end if	

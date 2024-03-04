@@ -28,11 +28,12 @@ OBJS := $(addsuffix .o, $(SRCS))
 
 all: mrna_gene
 
+$(OBJS): %.o: %
+	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
+
 mrna_gene: $(OBJS)
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-$(OBJS): %.o: %
-	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
 
 # define dependencies between object files
 src/mrna_gene.f90.o: src/kind_parameters.f90.o src/init_mrna_gene.f90.o src/randf.f90.o
@@ -44,8 +45,8 @@ src/randf.f90.o: src/kind_parameters.f90.o
 # rebuild all object files in case this Makefile changes
 $(OBJS): $(MAKEFILE_LIST)
 
-run:
-	./
+run: mrna_gene
+	./mrna_gene
 
 # Cleanup, filter to avoid removing source code by accident
 clean:
