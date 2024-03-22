@@ -3,172 +3,88 @@ program gillespie
 ! algorithm. Imagine a feedback control system. mRNA is produced, which
 ! triggers the production of a Protein. Both decay at some rate which
 ! depends on their abundance.
-! x0 == alpha >> x0 + a			x1 == beta x0 >> x1 + b
+! x0 == R >> x0 + a			x1 == alpha x0 >> x1 + b
 ! x0 == x0/tau1 >> x0 - 1	x1 == x1/tau1 >> x1 - 1
 use kind_parameters
 implicit none
 
-! System parameters ====================================================
+! == System parameters ==
 integer, dimension(2), parameter :: burst = [1, 1]	! Size of burst for [x0, x1]
-real(dp), parameter :: alpha = 1.0_dp	! x0 production rate
-real(dp), parameter :: beta = 1.0_dp	! x1 production rate constant
-real(dp), parameter, dimension(2) :: decay = [1.0_dp, 4.0_dp]	! Decay rates
+real(dp), parameter :: beta = 1.0_dp	! x0 production rate
+real(dp), parameter :: alpha = 1.0_dp	! x1 production rate constant
+real(dp), parameter, dimension(2) :: r = [1.0_dp, 1.0_dp]	! Decay rates
 integer, parameter, dimension(4,2) :: abund_update = &	! Abundance update matrix
 	reshape((/burst(1), 0, &
 			-1, 0, &
 			0, burst(2), &
-			0, -1/), shape(abund_update), order=[2,1])
+			0, -1/), shape(abund_update))
 
-! Program hyperparameters ==============================================
-integer, parameter :: dmax = 10**5	! When we want to stop
-integer, parameter :: abund_max = 10**2
-character(*), parameter :: f_abund = "abundance.dat"	! File for abundances
-character(*), parameter :: f_prop = "propensity.dat"	! File for propensities
+! == Program hyperparameters ==
+real(dp), parameter :: tmax = 100._dp	! When we want to stop
+character(*), parameter :: f_abund = "abundances.dat"	! File for abundances
 
-! Other variables ======================================================
+! == Other variables ==
 integer, dimension(2) :: abund = [0, 0]	!	(Initial) abundances
 real(dp), dimension(4) :: propensity = 0._dp	! The rates, but with a fancy name
-real(dp) :: time = 0._dp, dt
-real(dp), dimension(2, abund_max) :: probx = 0._dp
-real(dp), dimension(abund_max, abund_max) :: probxy = 0._dp
-real(dp), allocatable :: t(:), r(:,:)	! Array for time and rates
-integer, allocatable :: x(:,:)	! Arrays for abundances
-integer :: steps=0, ndecay(2)=0, i, io1, io2, event
+real(dp) :: time = 0._dp
+real(dp), allocatable :: t(:)	! Array for time
+integer, allocatable :: x(:,:)	! Array for abundances
+integer :: steps, i, io
 
 
-! ======================================================================
 call random_seed()	! Initialize random seed. Later it might be useful to use the Numerical Recipes version?
 
-! Open file to hold abundances and rates
-open(newunit=io1, file=f_abund, action="write")
-open(newunit=io2, file=f_prop, action="write")
-
-do while (minval(ndecay) < dmax)
-	write(io1,*) time, abund
-	write(io2,*) time, propensity
+steps = 0
+! Open file to hold abundances
+open(newunit=io, file=f_abund, action="write")
+do while (time < tmax)
+	write(io,*) time, abund
 	! Do gillespie algorithm
-	call gillespie_iter(abund, dt, event)
-	time = time + dt
-	! If we performed a decay step, add it to the counter.
-	if (event == 2 .or. event == 4) then
-		ndecay(event/2) = ndecay(event/2) + 1
-	end if
-	! Add the time step to whatever the current abundances are.
-	do i = 1,2
-		probx(i,abund(i)+1) = probx(i,abund(i)+1) + dt
-	end do
-	probxy(abund(1)+1, abund(2)+1) = probxy(abund(1)+1, abund(2)+1) + dt
-	abund = abund + abund_update(event,:)
+	call gillespie_iter(abund, time)
 	steps = steps + 1
 end do
 ! Take care of last loop iteration where we go over tmax.
-write(io1,*) time, abund;	close(io1)
-write(io2,*) time, propensity;	close(io2)
+write(io,*) time, abund
+close(io)
 steps = steps + 1
 
-probx = probx / time
-probxy = probxy / time
-write(*,*) sum(probx), sum(probxy)
+! Fill allocatable arrays with data we just generated
+call get_abundance(steps)
+! Make the covariance matrix
+call covariance_matrix(steps, x(:,1), x(:,2))
 
-do i = 1, abund_max
-	write(1,*) i-1, probx(1,i), probx(2,i)
-end do
-
-call checks(probx, probxy)
-
-! Fill allocatable arrays with data we just generated.
-! call get_allocatable(steps)
-
-! Make the covariance matrix.
-! call covariance_matrix(x(:,1), x(:,2), steps)
 
 
 contains !==============================================================
 
 
-subroutine checks(p, pxy)
-	real(dp), dimension(2, abund_max), intent(in) :: p
-	real(dp), dimension(abund_max, abund_max), intent(in) :: pxy
-	real(dp) :: mean(2)=0., covar(2,2)=0.
-	integer i, j, k, l
-	
-	do i = 1, abund_max
-		mean(:) = 1._dp*(mean(:) + (i-1.) * p(:,i))
-	end do
-	
-	write(*,*) 'Theory mean: ', alpha/decay(1), mean(1)*beta/decay(2)
-	write(*,*) 'Sim mean: ', mean
-	
-	do i = 1,2
-		do j = 1,abund_max
-			covar(i,i) = covar(i,i) + p(i,j) * ((j-1)-mean(i))**2
-		end do
-		covar(i,i) = covar(i,i) / mean(i)**2
-	end do 
-	
-	do i = 1,2
-	do j = 1,2
-		if (i /= j) then
-			do k = 1,abund_max
-			do l = 1,abund_max
-				covar(i,j) = covar(i,j) + pxy(k,l)*(k-1.-mean(1))*(l-1.-mean(2))
-			end do
-			end do
-			covar(i,j) = covar(i,j) / (mean(1)*mean(2))
-		end if
-	end do
-	end do
-		
-	write(*,*) 'Theory covar: ', &
-		1./mean(1), &
-		1./mean(1) * decay(2)/sum(decay), &
-		1./mean(1) * decay(2)/sum(decay), &
-		1./mean(2) + 1./mean(1) * decay(2)/sum(decay)
-	write(*,*) 'Sim covar: ', covar
-	
-	
-end subroutine
 
-
-function covariance(x, y, n) result(cov)
-	real(dp), dimension(n), intent(in) :: x, y
+subroutine get_abundance(n)
 	integer, intent(in) :: n
-	real(dp) :: cov
-	
-	cov = 1._dp * (sum(x*y) - sum(x)*sum(y)/n) / n
-end function
-
-subroutine get_allocatable(n)
-	integer, intent(in) :: n
-	integer :: i, io1, io2
-	real :: dum
+	integer :: i, io
 	
 	allocate(x(n,2))
-	allocate(r(n,4))
 	allocate(t(n))
-	
-	open(newunit=io1, file=f_abund, action="read")
-	open(newunit=io2, file=f_prop, action="read")
+	open(newunit=io, file=f_abund, action="read")
 	do i = 1,n
-		read(io1, *) t(i), x(i,1), x(i,2)
-		read(io2, *) dum, r(i,1), r(i,2), r(i,3), r(i,4)
+		read(io, *) t(i), x(i,1), x(i,2)
 	end do
-	close(io1)
-	close(io2)
+	close(io)
+		
 end subroutine
 
 
-subroutine covariance_matrix(x, y, n)
+subroutine covariance_matrix(n, x, y)
 	integer, intent(in) :: n
 	integer, dimension(n), intent(in) :: x, y
 	real(dp) :: cov(2,2)
-	integer :: i
+	integer :: i, j
 	
 	! Naive algorithm
-	cov(1,1) = (sum(x*x) - 1._dp*sum(x)*sum(x)/n) / n
-	cov(1,2) = (sum(x*y) - 1._dp*sum(x)*sum(y)/n) / n
-	cov(2,1) = (sum(y*x) - 1._dp*sum(y)*sum(x)/n) / n
-	cov(2,2) = (sum(y*y) - 1._dp*sum(y)*sum(y)/n) / n
+	cov(1,1) = 1._dp*(sum(x*x) - sum(x)*sum(x)/n) / n
+	cov(1,2) = 1._dp*(sum(x*y) - sum(x)*sum(y)/n) / n
+	cov(2,1) = 1._dp*(sum(y*x) - sum(y)*sum(x)/n) / n
+	cov(2,2) = 1._dp*(sum(y*y) - sum(y)*sum(y)/n) / n
 	
 	write(*,*) "Covariance matrix:"
 	do i = 1,2
@@ -179,18 +95,19 @@ end subroutine
 
 ! Run one step of the Gillespie algorithm: update the propensities, take
 ! a time step, get the reaction, update abundances. 
-subroutine gillespie_iter(x, tstep, i)
-	real(dp), intent(out) :: tstep
+subroutine gillespie_iter(x, t)
+	real(dp), intent(inout) :: t
 	integer, intent(inout) :: x(2)
-	integer, intent(out) :: i
-	real(dp) :: psum, propsum, roll
+	integer :: i
+	real(dp) :: psum, propsum, roll, dt
 
 	! Update propensity
 	call update_propensity(x)
 	propsum = sum(propensity)
 	
 	! Update time
-	call random_exp(1./propsum, tstep)
+	call random_exp(1./propsum, dt)
+	t = t + dt
 	
 	! Get reaction
 	call random_number(roll)
@@ -202,7 +119,7 @@ subroutine gillespie_iter(x, tstep, i)
 	end do
 	
 	! Update abundances
-	! x = x + abund_update(i,:)
+	x = x + abund_update(i,:)
 end subroutine
 
 
@@ -210,10 +127,10 @@ end subroutine
 subroutine update_propensity(x)
 	integer, intent(in) :: x(2)
 	
-	propensity(1) = alpha		! Make x0 (mRNA)
-	propensity(2) = x(1)*decay(1)	! Degrade x0 (mRNA)
-	propensity(3) = beta*x(1)	! Make x1 (Protein)
-	propensity(4) = x(2)*decay(2)	! Degrade x1 (Protein)
+	propensity(1) = beta		! Make x0 (mRNA)
+	propensity(2) = x(1)*r(1)	! Degrade x0 (mRNA)
+	propensity(3) = alpha*x(1)	! Make x1 (Protein)
+	propensity(4) = x(2)*r(2)	! Degrade x1 (Protein)
 end subroutine
 
 

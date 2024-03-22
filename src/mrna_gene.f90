@@ -1,6 +1,5 @@
 program mrna_gean
 use kind_parameters
-! use init_mrna_gene
 use randf
 use init_mrna_gene
 implicit none
@@ -12,7 +11,6 @@ call random_seed()
 
 ! call random_uniform(alpha, 1._dp, 10._dp)
 ! call random_uniform(beta, 1._dp, 10._dp)
-! call random_uniform(tau(1), 0.1_dp, 1._dp)
 ! call random_uniform(tau(2), 0.1_dp, 1._dp)
 
 open(newunit=io, file=fout, position="append", action="write")
@@ -31,8 +29,8 @@ do while (minval(ndecay) < decay_min)
 		call exit()
 	end if
 
-	! Get time step and event from Gillespie algorithm
-	call gillespie_iter(x, tstep, event)
+	! Get time step and event from Gillespie algorithm. Update propensity
+	call gillespie_iter(x, tstep, event, propensity)
 	t = t + tstep
 	
 	! Track the abundances and time in a window for correlations.
@@ -41,7 +39,10 @@ do while (minval(ndecay) < decay_min)
 	ttail(:ntail-1) = ttail(2:ntail)
 	ttail(ntail) = t
 	
-	call update_autocorr(acorr, xtail, ttail, acorr_mean, tstep, acorr_tstep)
+	! Start calculating correlations once window is big enough.
+	if (ttail(1) /= 0.0) then
+ 		call update_acorr(acorr_mean2, xtail, ttail, acorr_mean, tstep)
+	end if
 
 	! Add time step to probability matrices
 	prob_cond(x(1)+1, x(2)+1) = prob_cond(x(1)+1, x(2)+1) + tstep
@@ -56,84 +57,134 @@ do while (minval(ndecay) < decay_min)
 	end if
 end do
 
+! Simulation ends. =====================================================
+! Now do calculations.
+
+! Normalize probability
+prob_rate = prob_rate / sum(prob_rate)
+prob_cond = prob_cond / sum(prob_cond)
+
+! Get the mean abundances
+mean = get_mean(prob_cond)
+
 ! Don't know total time until end.
-acorr = acorr / t
+acorr_mean2 = acorr_mean2 / t
 acorr_mean = acorr_mean / t
-write(*,*) acorr(2), acorr_mean(2), acorr_mean(1)
 
 do i = 1, acorr_n
-	acorr(i) = (acorr(i) - acorr_mean(i)*acorr_mean(1))
+	! Combine the variances and means into the Pearson autocorrelation (normalized by variance)
+	acorr(i) = (acorr_mean2(i) - acorr_mean(i)*acorr_mean(1)) / &
+			(acorr_mean2(1)-acorr_mean(1)**2)
 end do
-
-! This LOOKS like cheating, but it's actaully not. acoor(1) is exactly
-! the normalization
-acorr = acorr / acorr(1)
 
 do i = 1, acorr_n
 	t = (i-1)*acorr_tstep
 	write(2,*) t, acorr(i), exp(-t/tau(1))
 end do
 
+write(*,*) "Mean: ", mean
 
-
-! Normalize probability
-prob_rate = prob_rate / sum(prob_rate)
-prob_cond = prob_cond / sum(prob_cond)
-
-! call checks(prob_cond)
+call checks(prob_cond)
 close(io)
+call dump()
 
 
 ! Functions and Subroutines ============================================
 contains
 
 
-subroutine update_autocorr(acorr, xvec, tvec, mean, tint, dt)
+subroutine update_acorr(mean2, xvec, tvec, mean, dt)
+! Iteratively updates autocorrelation variables (covariance and mean) every time step.
 	integer, intent(in) :: xvec(2, ntail)
-	real(dp), intent(in) :: tvec(ntail), tint, dt
-	real(dp), intent(inout) :: acorr(acorr_n), mean(acorr_n)
+	real(dp), intent(in) :: tvec(ntail), dt
+	real(dp), intent(inout) :: mean2(acorr_n), mean(acorr_n)
 	real(dp) :: t, ta, tb
-	integer :: i, j, ti, tai, tbi
+	integer :: i, j, ti, ita, itb
 	
 	! Crash if we aren't carrying enough information around
 	if (tvec(ntail)-tvec(1) < lag_max .and. tvec(1) /= 0.) then
-		write(*,*) tvec(ntail)-tvec(1)
-		write(*,*) "Error in update_autocorr: Maximum lag larger than recorded time."
+		write(*,*) "Error in update_autocorr: Required lag larger than recorded lag. Increase ntail."
+		write(*,*) "Recorded time lag: ", tvec(ntail)-tvec(1)
+		write(*,*) "Required time lag: ", lag_max
 		call exit()
 	end if
 	
 	! For the leading edge (no lag) we always take exactly one step.
-	mean(1) = mean(1) + xvec(1,ntail) * tint
-	acorr(1) = acorr(1) + xvec(1,ntail)**2 * tint
+	! Integrate a rectangle.
+	mean(1) = mean(1) + xvec(1,ntail) * dt
+	mean2(1) = mean2(1) + xvec(1,ntail)**2 * dt
 	
 	do i = 2, acorr_n
 		! For points with lag, we have to check some things.
-		tb = tvec(ntail) - i*dt
-		ta = tb - tint
+		! Range of time we're interested in.
+		tb = tvec(ntail) - (i-1.)*acorr_tstep
+		ta = tb - dt
 		t = ta
 		! Most recent points smaller than ta and tb
-		tai = maxloc(tvec, dim=1, mask=ta-tvec .gt. 0.)
-		tbi = maxloc(tvec, dim=1, mask=tb-tvec .gt. 0.)
-		if (tai == tbi) then
-			acorr(i) = acorr(i) + xvec(1,tai+1) * xvec(1,ntail) * tint
-			mean(i) = mean(i) + xvec(1,tai+1) * tint
+		ita = maxloc(tvec, dim=1, mask=ta-tvec .gt. 0.)
+		itb = maxloc(tvec, dim=1, mask=tb-tvec .gt. 0.)
+		! Special case where no step occured in time range. Integrate a rectangle
+		if (ita == itb) then
+			mean2(i) = mean2(i) + xvec(1,ita+1) * xvec(1,ntail) * dt
+			mean(i) = mean(i) + xvec(1,ita+1) * dt
 		else
 			! ta side
-			acorr(i) = acorr(i) + xvec(1,tai+1) * xvec(1,ntail) * (tvec(tai+1)-ta)
-			mean(i) = mean(i) + xvec(1,tai+1) * (tvec(tai+1)-ta)
+			mean2(i) = mean2(i) + xvec(1,ita+1) * xvec(1,ntail) * (tvec(ita+1)-ta)
+			mean(i) = mean(i) + xvec(1,ita+1) * (tvec(ita+1)-ta)
 			! tb side
-			acorr(i) = acorr(i) + xvec(1,tbi+1) * xvec(1,ntail) * (tb-tvec(tbi))
-			mean(i) = mean(i) + xvec(1,tbi+1) * (tb-tvec(tbi))
+			mean2(i) = mean2(i) + xvec(1,itb+1) * xvec(1,ntail) * (tb-tvec(itb))
+			mean(i) = mean(i) + xvec(1,itb+1) * (tb-tvec(itb))
 			
 			! integrate from ta to tb
-			do j = tai+1, tbi-1
-				acorr(i) = acorr(i) + xvec(1,j+1) * xvec(1,ntail) * (tvec(j+1)-tvec(j))
+			do j = ita+1, itb-1
+				mean2(i) = mean2(i) + xvec(1,j+1) * xvec(1,ntail) * (tvec(j+1)-tvec(j))
 				mean(i) = mean(i) + xvec(1,j+1) * (tvec(j+1)-tvec(j))
 			end do
 		end if	
 	end do
 end subroutine
 
+
+function get_mean(p_cond) result(mean)
+	real(dp) :: mean(2)
+	real(dp), intent(in) :: p_cond(abund_max, abund_max)
+	real(dp) :: p(2, abund_max)
+	integer :: xval(abund_max)
+	
+	do i = 1, abund_max
+		xval(i) = i-1
+		p(1,i) = sum(p_cond(i,:))
+		p(2,i) = sum(p_cond(:,i))
+	end do
+	mean = matmul(p, xval)
+end function
+
+!subroutine get_covar(covar, mean, p_cond)
+!	real(dp), intent(inout) :: cov(2,2), mean(2)
+!	real(dp), intent(in) :: p_joint
+!	integer :: abund(abund_max)
+!	real(dp) :: p(2,abund_max)
+	
+!	! Create probability distributions for x1 and x2 from joint probability distribution.
+!	do i = 1, abund_max
+!		abund(i) = i-1
+!		p(1,i) = sum(p_joint(i,:))
+!		p(2,i) = sum(p_joint(:,i))
+!	end do
+	
+!	! Check covariances
+!	covar(1,1) = dot_product(p(1,:), (labels-mean(1))**2) / mean(1)**2
+!	covar(2,2) = dot_product(p(2,:), (labels-mean(2))**2) / mean(2)**2
+!	do i = 1, abund_max
+!	do j = 1, abund_max
+!		covar(1,2) = covar(1,2) + pij(i,j)*(labels(i)-mean(1))*(labels(j)-mean(2))
+!		theory_covar(1,1) = theory_covar(1,1) + pij(i,j)*(labels(i)-theory_mean(1))*(rate_values(j)-mean_rate)
+!		! Notice we use labels(j), because this is for x1.
+!		theory_covar(1,2) = theory_covar(1,2) + pij(i,j)*(labels(j)-theory_mean(2))*(rate_values(j)-mean_rate)
+!	end do
+!	end do
+
+!end subroutine
 
 !subroutine autocorr_wiener_khinchin(tin, xin, n)
 !	real(dp), dimension(:), intent(in) :: tin
@@ -183,7 +234,7 @@ subroutine checks(pij)
 	! Create probability distributions for x1 and x2 from joint
 	! probability distribution, create labels while we're at it.
 	do i = 1, abund_max
-		rate_values(i) = alpha*R([0,i-1])
+		rate_values(i) = alpha
 		labels(i) = i-1
 		p(1,i) = sum(pij(i,:))
 		p(2,i) = sum(pij(:,i))
@@ -235,19 +286,20 @@ subroutine checks(pij)
 end subroutine
 
 
-subroutine gillespie_iter(xx, tstep, event)
+subroutine gillespie_iter(xx, tstep, event, propensity)
 ! Run one step of the Gillespie algorithm given the current state of the
 ! system. Update the propensities, return time step and reaction
 	real(dp), intent(out) :: tstep
 	integer, intent(inout) :: xx(2)
+	real(dp), intent(inout) :: propensity(4)
 	integer, intent(out) :: event
 	real(dp) :: psum, propsum, roll
 
 	! Update propensity
-	call update_propensity(xx)
+	propensity = update_propensity(xx)
 	propsum = sum(propensity)
 	
-	! Update time
+	! Get time step time
 	call random_exp(1./propsum, tstep)
 	
 	! Get reaction
@@ -261,32 +313,38 @@ subroutine gillespie_iter(xx, tstep, event)
 end subroutine
 
 
-pure function R(x)
-! Rate function for x1 production
-	integer, dimension(2), intent(in) :: x
-	real(dp) :: R
-	! R = hill(x(2), k, n)
-	R = 1._dp
-end function
-
-
-subroutine update_propensity(x)
+pure function update_propensity(x) result(propensity)
 ! Updates propensities depending on the state of the system
 	integer, intent(in) :: x(2)
-	propensity(1) = alpha * R(x)	! Make x1 (mRNA)
+	real(dp) :: propensity(4)
+	propensity(1) = alpha	! Make x1 (mRNA)
 	propensity(2) = x(1)/tau(1)	! Degrade x1 (mRNA)
 	propensity(3) = beta*x(1)	! Make x2 (Protein)
 	propensity(4) = x(2)/tau(2)	! Degrade x2 (Protein)
+end function
+
+
+subroutine dump()
+	write(*,*) "Simulation mean: ", mean
 end subroutine
 
 
-pure function hill(x, k, n)
-! Hill function
-	real(dp), intent(in) :: k, n
-	integer, intent(in) :: x
-	real(dp) :: hill
-	hill = 1._dp / (1. + (1._dp*x/k)**n)
-end function
+!pure function R(x)
+!! Rate function for x1 production
+!	integer, dimension(2), intent(in) :: x
+!	real(dp) :: R
+!	! R = hill(x(2), k, n)
+!	R = 1._dp
+!end function
+
+
+!pure function hill(x, k, n)
+!! Hill function
+!	real(dp), intent(in) :: k, n
+!	integer, intent(in) :: x
+!	real(dp) :: hill
+!	hill = 1._dp / (1. + (1._dp*x/k)**n)
+!end function
 
 
 end program
