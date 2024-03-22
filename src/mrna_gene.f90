@@ -3,15 +3,17 @@ use kind_parameters
 use randf
 use init_mrna_gene
 implicit none
-include "fftw3.f"
 
 ! Program begins
 ! ======================================================================
 call random_seed()
 
-! call random_uniform(alpha, 1._dp, 10._dp)
-! call random_uniform(beta, 1._dp, 10._dp)
-! call random_uniform(tau(2), 0.1_dp, 1._dp)
+!call random_uniform(alpha, 1._dp, 10._dp)
+!call random_uniform(beta, 1._dp, 10._dp)
+!call random_uniform(tau(2), 0.1_dp, 1._dp)
+
+! Start abundances near their average. Runs slightly faster, less weird starting artifacts.
+x(1) = alpha*tau(1); x(2) = alpha*tau(1)*beta*tau(2)
 
 open(newunit=io, file=fout, position="append", action="write")
 write(io, "(4f20.14)", advance="no") alpha, beta, tau
@@ -41,7 +43,7 @@ do while (minval(ndecay) < decay_min)
 	
 	! Start calculating correlations once window is big enough.
 	if (ttail(1) /= 0.0) then
- 		call update_acorr(acorr_mean2, xtail, ttail, acorr_mean, tstep)
+! 		call update_acorr(acorr_mean2, xtail, ttail, acorr_mean, tstep)
 	end if
 
 	! Add time step to probability matrices
@@ -67,6 +69,9 @@ prob_cond = prob_cond / sum(prob_cond)
 ! Get the mean abundances
 mean = get_mean(prob_cond)
 
+! Get the covariances
+covar = get_covar(mean, prob_cond)
+
 ! Don't know total time until end.
 acorr_mean2 = acorr_mean2 / t
 acorr_mean = acorr_mean / t
@@ -85,8 +90,8 @@ end do
 write(*,*) "Mean: ", mean
 
 call checks(prob_cond)
-close(io)
 call dump()
+close(io)
 
 
 ! Functions and Subroutines ============================================
@@ -146,6 +151,7 @@ end subroutine
 
 
 function get_mean(p_cond) result(mean)
+! Get the mean abundances.
 	real(dp) :: mean(2)
 	real(dp), intent(in) :: p_cond(abund_max, abund_max)
 	real(dp) :: p(2, abund_max)
@@ -159,69 +165,32 @@ function get_mean(p_cond) result(mean)
 	mean = matmul(p, xval)
 end function
 
-!subroutine get_covar(covar, mean, p_cond)
-!	real(dp), intent(inout) :: cov(2,2), mean(2)
-!	real(dp), intent(in) :: p_joint
-!	integer :: abund(abund_max)
-!	real(dp) :: p(2,abund_max)
+function get_covar(mean, p_cond) result(cov)
+! Get the covariance matrix.
+	real(dp) :: cov(2,2)
+	real(dp), intent(in) :: p_cond(:,:), mean(2)
+	real(dp) :: p(2,abund_max)
+	integer :: xval(abund_max), i, j
 	
-!	! Create probability distributions for x1 and x2 from joint probability distribution.
-!	do i = 1, abund_max
-!		abund(i) = i-1
-!		p(1,i) = sum(p_joint(i,:))
-!		p(2,i) = sum(p_joint(:,i))
-!	end do
+	! Create probability distributions for x1 and x2 from joint probability distribution.
+	do i = 1, abund_max
+		xval(i) = i-1
+		p(1,i) = sum(p_cond(i,:))
+		p(2,i) = sum(p_cond(:,i))
+	end do
 	
-!	! Check covariances
-!	covar(1,1) = dot_product(p(1,:), (labels-mean(1))**2) / mean(1)**2
-!	covar(2,2) = dot_product(p(2,:), (labels-mean(2))**2) / mean(2)**2
-!	do i = 1, abund_max
-!	do j = 1, abund_max
-!		covar(1,2) = covar(1,2) + pij(i,j)*(labels(i)-mean(1))*(labels(j)-mean(2))
-!		theory_covar(1,1) = theory_covar(1,1) + pij(i,j)*(labels(i)-theory_mean(1))*(rate_values(j)-mean_rate)
-!		! Notice we use labels(j), because this is for x1.
-!		theory_covar(1,2) = theory_covar(1,2) + pij(i,j)*(labels(j)-theory_mean(2))*(rate_values(j)-mean_rate)
-!	end do
-!	end do
-
-!end subroutine
-
-!subroutine autocorr_wiener_khinchin(tin, xin, n)
-!	real(dp), dimension(:), intent(in) :: tin
-!	integer, dimension(:), intent(in) :: xin
-!	integer, intent(in) :: n
-!	real(dp) :: x(n), Sxx(n), corr(n)
-!	complex(8), dimension(n) :: xout
-!	integer :: i, tindex
-!	real(dp) :: t, dt
-!	integer*8 :: plan
+	! Diagonal covariances are just variances.
+	cov(1,1) = dot_product(p(1,:), (xval-mean(1))**2) / mean(1)**2
+	cov(2,2) = dot_product(p(2,:), (xval-mean(2))**2) / mean(2)**2
 	
-!	dt = maxval(tin)/(n-1.)
-	
-!	do i = 1, n
-!		t = (i-1.)*dt
-!		tindex = maxloc(tin, dim=1, mask=tin-t .lt. 1E-12)
-!		! x(i) = xin(tindex)
-!		x(i) = xin(tindex) * sin(pi*(i-1)/(n-1))**2
-!		! write(*,*) t, tin(tindex), x(i), xin(tindex)
-!	end do
-	
-!	call dfftw_plan_dft_r2c_1d(plan, n, x, xout, FFTW_ESTIMATE)
-!	call dfftw_execute_dft_r2c(plan, x, xout)
-!	call dfftw_destroy_plan(plan)
-!	Sxx = abs(xout)
-	
-!	call dfftw_plan_dft_1d(plan, n/2, Sxx, corr, FFTW_BACKWARD, FFTW_ESTIMATE)
-!	call dfftw_execute_dft(plan, Sxx, corr)
-!	call dfftw_destroy_plan(plan)
-	
-!	corr = corr/maxval(corr)
-	
-!	do i = 1, n/2
-!		write(1,*) i*dt, Sxx(i), corr(i), exp(-i*dt/tau(1))
-!	end do
-	
-!end subroutine
+	! Off diagonal covariances are symmetric.
+	do i = 1, abund_max
+	do j = 1, abund_max
+		cov(1,2) = cov(1,2) + (p_cond(i,j)*(xval(i)-mean(1))*(xval(j)-mean(2))) / (mean(1)*mean(2))
+	end do
+	end do
+	cov(2,1) = cov(1,2)
+end function
 
 
 subroutine checks(pij)
@@ -326,6 +295,9 @@ end function
 
 subroutine dump()
 	write(*,*) "Simulation mean: ", mean
+	write(*,*) "Covariance matrix: "
+	write(*,*) covar(1,1), covar(1,2)
+	write(*,*) covar(2,1), covar(2,2)
 end subroutine
 
 

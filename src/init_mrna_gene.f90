@@ -10,7 +10,7 @@ real(dp), parameter :: pi = 4.D0*DATAN(1.D0)
 ! Number of decay events before stopping
 integer, parameter :: decay_min = 10**5
 ! Maximum abundances. Program will exit if this is exceeded
-integer, parameter :: abund_max = 2**5
+integer, parameter :: abund_max = 2**7
 ! Number of abundance updates to remember for autocorrelation
 integer, parameter :: ntail = 2**6
 ! Time step for autocorrelation

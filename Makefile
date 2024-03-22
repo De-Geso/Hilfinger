@@ -7,7 +7,7 @@ MAKEFLAGS += --no-builtin-rules --no-builtin-variables
 FC := gfortran
 LD := $(FC)
 FFLAGS := -O3
-LDLIBS := -lfftw3
+LDLIBS :=
 LDFLAGS := -I/usr/include/
 RM := rm -f
 
