@@ -8,17 +8,18 @@ public
 ! ======================================================================
 real(dp), parameter :: pi = 4.D0*DATAN(1.D0)
 ! Number of decay events before stopping
-integer, parameter :: decay_min = 10**5
+integer, parameter :: decay_min = 10**6
 ! Maximum abundances. Program will exit if this is exceeded
 integer, parameter :: abund_max = 2**7
 ! Number of abundance updates to remember for autocorrelation
-integer, parameter :: ntail = 2**6
-! Time step for autocorrelation
-real(dp), parameter :: corr_tstep = 0.1_dp
+integer, parameter :: ntail = 2**8
 ! Length of autocorrelation vector
-integer, parameter :: corr_n = 2**3
+integer, parameter :: corr_n = 2**5
 ! Maximum time lag for autocorrelation
-real(dp), parameter :: lag_max = corr_n*corr_tstep
+real(dp), parameter :: lag_max = 10._dp
+! Time step for autocorrelation
+real(dp), parameter :: corr_tstep = 1._dp*lag_max/corr_n
+
 
 
 ! Parameters
@@ -50,7 +51,7 @@ integer, dimension(2) :: x = [0, 0], ndecay = [0, 0]
 ! Probability matrices
 real(dp) :: prob_cond(abund_max, abund_max), prob(2, abund_max), prob_rate(abund_max)
 ! Autocorrelation
-real(dp) :: corr(corr_n), corr_mean(corr_n), corr_mean2(corr_n)
+real(dp) :: corr(corr_n), corr_mean(2,corr_n), corr_mean2(corr_n)
 ! Covariance
 real(dp) :: covar(2,2), mean(2)
 ! Timers

@@ -43,7 +43,7 @@ do while (minval(ndecay) < decay_min)
 	
 	! Start calculating correlations once window is big enough.
 	if (ttail(1) /= 0.0) then
- 		call update_corr(corr_mean2, xtail, ttail, corr_mean, tstep)
+ 		call update_corr(corr_mean2, corr_mean(1,:), corr_mean(2,:), xtail(1,:), xtail(2,:), ttail, tstep)
 	end if
 
 	! Add time step to probability matrices
@@ -78,8 +78,8 @@ corr_mean = corr_mean / t
 
 do i = 1, corr_n
 	! Combine the variances and means into the Pearson autocorrelation (normalized by variance)
-	corr(i) = (corr_mean2(i) - corr_mean(i)*corr_mean(1)) / &
-			(corr_mean2(1)-corr_mean(1)**2)
+	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / &
+			(corr_mean2(1)-corr_mean(1,i)*corr_mean(2,1))
 end do
 
 write(*,*) "Mean: ", mean
@@ -93,11 +93,11 @@ close(io)
 contains
 
 
-subroutine update_corr(mean2, xvec, tvec, mean, dt)
+subroutine update_corr(mean2, meanx , meany, x, y, tvec, dt)
 ! Iteratively updates autocorrelation variables (covariance and mean) every time step.
-	integer, intent(in) :: xvec(2, ntail)
+	integer, intent(in) :: x(ntail), y(ntail)
 	real(dp), intent(in) :: tvec(ntail), dt
-	real(dp), intent(inout) :: mean2(corr_n), mean(corr_n)
+	real(dp), intent(inout) :: mean2(corr_n), meanx(corr_n), meany(corr_n)
 	real(dp) :: t, ta, tb
 	integer :: i, j, ti, ita, itb
 	
@@ -111,8 +111,9 @@ subroutine update_corr(mean2, xvec, tvec, mean, dt)
 	
 	! For the leading edge (no lag) we always take exactly one step.
 	! Integrate a rectangle.
-	mean(1) = mean(1) + xvec(1,ntail) * dt
-	mean2(1) = mean2(1) + xvec(1,ntail)**2 * dt
+	meanx(1) = meanx(1) + x(ntail) * dt
+	meany(1) = meany(1) + y(ntail) * dt
+	mean2(1) = mean2(1) + x(ntail)*y(ntail) * dt
 	
 	do i = 2, corr_n
 		! For points with lag, we have to check some things.
@@ -125,20 +126,24 @@ subroutine update_corr(mean2, xvec, tvec, mean, dt)
 		itb = maxloc(tvec, dim=1, mask=tb-tvec .gt. 0.)
 		! Special case where no step occured in time range. Integrate a rectangle
 		if (ita == itb) then
-			mean2(i) = mean2(i) + xvec(1,ita+1) * xvec(1,ntail) * dt
-			mean(i) = mean(i) + xvec(1,ita+1) * dt
+			mean2(i) = mean2(i) + x(ita+1) * y(ntail) * dt
+			meanx(i) = meanx(i) + x(ita+1) * dt
+			meany(i) = meany(i) + y(ntail) * dt
 		else
 			! ta side
-			mean2(i) = mean2(i) + xvec(1,ita+1) * xvec(1,ntail) * (tvec(ita+1)-ta)
-			mean(i) = mean(i) + xvec(1,ita+1) * (tvec(ita+1)-ta)
+			mean2(i) = mean2(i) + x(ita+1) * y(ntail) * (tvec(ita+1)-ta)
+			meanx(i) = meanx(i) + x(ita+1) * (tvec(ita+1)-ta)
+			meany(i) = meany(i) + y(ntail) * (tvec(ita+1)-ta)
 			! tb side
-			mean2(i) = mean2(i) + xvec(1,itb+1) * xvec(1,ntail) * (tb-tvec(itb))
-			mean(i) = mean(i) + xvec(1,itb+1) * (tb-tvec(itb))
+			mean2(i) = mean2(i) + x(itb+1) * y(ntail) * (tb-tvec(itb))
+			meanx(i) = meanx(i) + x(itb+1) * (tb-tvec(itb))
+			meany(i) = meany(i) + y(ntail) * (tb-tvec(itb))
 			
 			! integrate from ta to tb
 			do j = ita+1, itb-1
-				mean2(i) = mean2(i) + xvec(1,j+1) * xvec(1,ntail) * (tvec(j+1)-tvec(j))
-				mean(i) = mean(i) + xvec(1,j+1) * (tvec(j+1)-tvec(j))
+				mean2(i) = mean2(i) + x(j+1) * y(ntail) * (tvec(j+1)-tvec(j))
+				meanx(i) = meanx(i) + x(j+1) * (tvec(j+1)-tvec(j))
+				meany(i) = meany(i) + y(ntail) * (tvec(j+1)-tvec(j))
 			end do
 		end if	
 	end do
