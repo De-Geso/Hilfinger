@@ -4,15 +4,15 @@ use randf
 use init_mrna_gene
 implicit none
 
-! Program begins
-! ======================================================================
+
 call random_seed()
 
+! Randomize variables when testing, if we so choose.
 !call random_uniform(alpha, 1._dp, 10._dp)
 !call random_uniform(beta, 1._dp, 10._dp)
 !call random_uniform(tau(2), 0.1_dp, 1._dp)
 
-! Start abundances near their average. Runs slightly faster, less weird starting artifacts.
+! Start abundances near their averages. Runs slightly faster, less weird starting artifacts.
 x(1) = alpha*tau(1); x(2) = alpha*tau(1)*beta*tau(2)
 
 open(newunit=io, file=fout, position="append", action="write")
@@ -22,7 +22,7 @@ prob_cond = 0._dp
 prob_rate = 0._dp
 
 t = 0._dp
-acorr_mean = 0._dp
+corr_mean = 0._dp
 
 do while (minval(ndecay) < decay_min)
 	! If we go over maximum abundance, stop.
@@ -43,7 +43,7 @@ do while (minval(ndecay) < decay_min)
 	
 	! Start calculating correlations once window is big enough.
 	if (ttail(1) /= 0.0) then
-! 		call update_acorr(acorr_mean2, xtail, ttail, acorr_mean, tstep)
+ 		call update_corr(corr_mean2, xtail, ttail, corr_mean, tstep)
 	end if
 
 	! Add time step to probability matrices
@@ -73,18 +73,13 @@ mean = get_mean(prob_cond)
 covar = get_covar(mean, prob_cond)
 
 ! Don't know total time until end.
-acorr_mean2 = acorr_mean2 / t
-acorr_mean = acorr_mean / t
+corr_mean2 = corr_mean2 / t
+corr_mean = corr_mean / t
 
-do i = 1, acorr_n
+do i = 1, corr_n
 	! Combine the variances and means into the Pearson autocorrelation (normalized by variance)
-	acorr(i) = (acorr_mean2(i) - acorr_mean(i)*acorr_mean(1)) / &
-			(acorr_mean2(1)-acorr_mean(1)**2)
-end do
-
-do i = 1, acorr_n
-	t = (i-1)*acorr_tstep
-	write(2,*) t, acorr(i), exp(-t/tau(1))
+	corr(i) = (corr_mean2(i) - corr_mean(i)*corr_mean(1)) / &
+			(corr_mean2(1)-corr_mean(1)**2)
 end do
 
 write(*,*) "Mean: ", mean
@@ -98,11 +93,11 @@ close(io)
 contains
 
 
-subroutine update_acorr(mean2, xvec, tvec, mean, dt)
+subroutine update_corr(mean2, xvec, tvec, mean, dt)
 ! Iteratively updates autocorrelation variables (covariance and mean) every time step.
 	integer, intent(in) :: xvec(2, ntail)
 	real(dp), intent(in) :: tvec(ntail), dt
-	real(dp), intent(inout) :: mean2(acorr_n), mean(acorr_n)
+	real(dp), intent(inout) :: mean2(corr_n), mean(corr_n)
 	real(dp) :: t, ta, tb
 	integer :: i, j, ti, ita, itb
 	
@@ -119,10 +114,10 @@ subroutine update_acorr(mean2, xvec, tvec, mean, dt)
 	mean(1) = mean(1) + xvec(1,ntail) * dt
 	mean2(1) = mean2(1) + xvec(1,ntail)**2 * dt
 	
-	do i = 2, acorr_n
+	do i = 2, corr_n
 		! For points with lag, we have to check some things.
 		! Range of time we're interested in.
-		tb = tvec(ntail) - (i-1.)*acorr_tstep
+		tb = tvec(ntail) - (i-1.)*corr_tstep
 		ta = tb - dt
 		t = ta
 		! Most recent points smaller than ta and tb
@@ -294,10 +289,18 @@ end function
 
 
 subroutine dump()
+	integer :: io
+	
 	write(*,*) "Simulation mean: ", mean
 	write(*,*) "Covariance matrix: "
 	write(*,*) covar(1,1), covar(1,2)
 	write(*,*) covar(2,1), covar(2,2)
+	
+	open(newunit=io, file='correlation.dat', action='write')
+	do i = 1, corr_n
+		t = (i-1)*corr_tstep
+		write(io,*) t, corr(i), exp(-t/tau(1))
+	end do
 end subroutine
 
 

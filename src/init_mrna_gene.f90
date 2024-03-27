@@ -14,11 +14,11 @@ integer, parameter :: abund_max = 2**7
 ! Number of abundance updates to remember for autocorrelation
 integer, parameter :: ntail = 2**6
 ! Time step for autocorrelation
-real(dp), parameter :: acorr_tstep = 0.1_dp
+real(dp), parameter :: corr_tstep = 0.1_dp
 ! Length of autocorrelation vector
-integer, parameter :: acorr_n = 2**3
+integer, parameter :: corr_n = 2**3
 ! Maximum time lag for autocorrelation
-real(dp), parameter :: lag_max = acorr_n*acorr_tstep
+real(dp), parameter :: lag_max = corr_n*corr_tstep
 
 
 ! Parameters
@@ -50,7 +50,7 @@ integer, dimension(2) :: x = [0, 0], ndecay = [0, 0]
 ! Probability matrices
 real(dp) :: prob_cond(abund_max, abund_max), prob(2, abund_max), prob_rate(abund_max)
 ! Autocorrelation
-real(dp) :: acorr(acorr_n), acorr_mean(acorr_n), acorr_mean2(acorr_n)
+real(dp) :: corr(corr_n), corr_mean(corr_n), corr_mean2(corr_n)
 ! Covariance
 real(dp) :: covar(2,2), mean(2)
 ! Timers
