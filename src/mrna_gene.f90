@@ -4,13 +4,16 @@ use randf
 use init_mrna_gene
 implicit none
 
+! I just ripped this seed from a random run
+integer :: seed(8)=[-1811353397, -1003849850, 1729996105, 1773249892, -1551880905, 1229063390, 556868908, -1643120466]
 
-call random_seed()
+call random_seed(put=seed)
+! call random_seed()
 
 ! Randomize variables when testing, if we so choose.
-!call random_uniform(alpha, 1._dp, 10._dp)
-!call random_uniform(beta, 1._dp, 10._dp)
-!call random_uniform(tau(2), 0.1_dp, 1._dp)
+call random_uniform(alpha, 1._dp, 10._dp)
+call random_uniform(beta, 1._dp, 10._dp)
+call random_uniform(tau(2), 0.1_dp, 1._dp)
 
 ! Start abundances near their averages. Runs slightly faster, less weird starting artifacts.
 x(1) = alpha*tau(1); x(2) = alpha*tau(1)*beta*tau(2)
@@ -24,7 +27,7 @@ prob_rate = 0._dp
 t = 0._dp
 corr_mean = 0._dp
 
-do while (minval(ndecay) < decay_min)
+do while (minval(nevents) < event_min)
 	! If we go over maximum abundance, stop.
 	if (maxval(x) >= abund_max) then
 		write(*,*) "Maximum abundance exceeded."
@@ -54,9 +57,7 @@ do while (minval(ndecay) < decay_min)
 	x = x + abund_update(:,event)
 
 	! Add decay events to counter
-	if (event .eq. 2 .or. event .eq. 4) then
-		ndecay(event/2) = ndecay(event/2) + 1
-	end if
+	nevents(event) = nevents(event) + 1
 end do
 
 ! Simulation ends. =====================================================
@@ -80,9 +81,8 @@ do i = 1, corr_n
 	! Combine the variances and means into the Pearson autocorrelation (normalized by variance)
 	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / &
 			(corr_mean2(1)-corr_mean(1,i)*corr_mean(2,1))
+!	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / covar(2,1)
 end do
-
-write(*,*) "Mean: ", mean
 
 call checks(prob_cond)
 call dump()

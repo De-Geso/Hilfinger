@@ -7,16 +7,16 @@ public
 ! Hyperparameters
 ! ======================================================================
 real(dp), parameter :: pi = 4.D0*DATAN(1.D0)
-! Number of decay events before stopping
-integer, parameter :: decay_min = 10**6
+! Number of events before stopping
+integer, parameter :: event_min = 10**5
 ! Maximum abundances. Program will exit if this is exceeded
 integer, parameter :: abund_max = 2**7
 ! Number of abundance updates to remember for autocorrelation
 integer, parameter :: ntail = 2**8
 ! Length of autocorrelation vector
-integer, parameter :: corr_n = 2**5
+integer, parameter :: corr_n = 2**3
 ! Maximum time lag for autocorrelation
-real(dp), parameter :: lag_max = 10._dp
+real(dp), parameter :: lag_max = 2._dp
 ! Time step for autocorrelation
 real(dp), parameter :: corr_tstep = 1._dp*lag_max/corr_n
 
@@ -31,7 +31,7 @@ real(dp) :: alpha = 1._dp
 ! x2 production rate
 real(dp) :: beta = 1._dp
 ! Decay rates. Can always leave tau_1=1
-real(dp), dimension(2) :: tau = [2._dp, 1._dp]
+real(dp), dimension(2) :: tau = [1._dp, 1._dp]
 ! Hill function parameters
 real(dp) :: k = 1._dp
 real(dp) :: n = 1._dp
@@ -47,7 +47,7 @@ integer, parameter, dimension(2,4) :: abund_update = &
 ! Propensity of each event
 real(dp), dimension(4) :: propensity = 0.0
 ! Abundances of each species, number of decay events for each species
-integer, dimension(2) :: x = [0, 0], ndecay = [0, 0]
+integer, dimension(2) :: x = [0, 0], nevents(4)=0
 ! Probability matrices
 real(dp) :: prob_cond(abund_max, abund_max), prob(2, abund_max), prob_rate(abund_max)
 ! Autocorrelation
