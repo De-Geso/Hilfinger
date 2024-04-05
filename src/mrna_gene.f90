@@ -4,24 +4,22 @@ use randf
 use init_mrna_gene
 implicit none
 
-! I just ripped this seed from a random run
-integer :: seed(8)=[-1811353397, -1003849850, 1729996105, 1773249892, -1551880905, 1229063390, 556868908, -1643120466]
-
-call random_seed(put=seed)
-! call random_seed()
+! call random_seed(put=seed)
+call random_seed()
 
 ! Randomize variables when testing, if we so choose.
-call random_uniform(alpha, 1._dp, 10._dp)
-call random_uniform(beta, 1._dp, 10._dp)
-call random_uniform(tau(2), 0.1_dp, 1._dp)
+call random_uniform(alpha, 1._dp, 5._dp)
+call random_uniform(beta, 1._dp, 5._dp)
+call random_uniform(tau(2), 0.2_dp, 1._dp)
 
 ! Start abundances near their averages. Runs slightly faster, less weird starting artifacts.
 x(1) = alpha*tau(1); x(2) = alpha*tau(1)*beta*tau(2)
 
 open(newunit=io, file=fout, position="append", action="write")
 write(io, "(4f20.14)", advance="no") alpha, beta, tau
+write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
 
-prob_cond = 0._dp
+prob_cond = 0._dp 
 prob_rate = 0._dp
 
 t = 0._dp
@@ -81,12 +79,13 @@ do i = 1, corr_n
 	! Combine the variances and means into the Pearson autocorrelation (normalized by variance)
 	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / &
 			(corr_mean2(1)-corr_mean(1,i)*corr_mean(2,1))
-!	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / covar(2,1)
+!	This works if you normalize by the mean as well. This is because our covariance is normalized by the mean
+!	but in the definition of the autocorrelation, it is not.
+!	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / (covar(1,2)*mean(1)*mean(2))
 end do
 
 call checks(prob_cond)
 call dump()
-close(io)
 
 
 ! Functions and Subroutines ============================================
@@ -295,19 +294,50 @@ end function
 
 subroutine dump()
 	integer :: io
+	real(dp) :: t
 	
 	write(*,*) "Simulation mean: ", mean
 	write(*,*) "Covariance matrix: "
 	write(*,*) covar(1,1), covar(1,2)
 	write(*,*) covar(2,1), covar(2,2)
 	
-	open(newunit=io, file='correlation.dat', action='write')
+	! Autocorrelations from simulations
+	open(newunit=io, file='autocorr_sim.dat', action='write')
 	do i = 1, corr_n
 		t = (i-1)*corr_tstep
-		write(io,*) t, corr(i), exp(-t/tau(1))
+		write(io,*) t, corr(i)
 	end do
+	close(io)
+	! Autocorrelations from theory
+	open(newunit=io, file='autocorr_thry.dat', action='write')
+	do i = 1, corr_n*100
+		t = (i-1)*corr_tstep/100
+		write(io,*) t, acorr_thry(t)
+	end do
+	close(io)
 end subroutine
 
+
+pure function acorr_thry(t) result (acorr)
+	real(dp) :: acorr(4)
+	real(dp), intent(in) :: t
+	! column major
+	
+	! Amm
+	acorr(1) = exp(-t/tau(1))
+	! Apm
+	acorr(2) = 0
+	! Amp
+	if (tau(1) /= tau(2)) then
+		acorr(3) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
+				* covar(1,1)/covar(2,1) * mean(1)/mean(2) / (tau(1)-tau(2))
+	end if
+	! App
+	if (tau(1) /= tau(2)) then
+		acorr(4) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
+				* covar(2,1)/covar(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+	end if
+end function
 
 !pure function R(x)
 !! Rate function for x1 production

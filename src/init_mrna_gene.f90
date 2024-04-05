@@ -6,17 +6,20 @@ public
 
 ! Hyperparameters
 ! ======================================================================
+! Pie!
 real(dp), parameter :: pi = 4.D0*DATAN(1.D0)
+! Repeatable seed. I ripped this seed from a random run
+integer, parameter :: seed(8)=[-1811353397, -1003849850, 1729996105, 1773249892, -1551880905, 1229063390, 556868908, -1643120466]
 ! Number of events before stopping
-integer, parameter :: event_min = 10**5
+integer, parameter :: event_min = 10**6
 ! Maximum abundances. Program will exit if this is exceeded
 integer, parameter :: abund_max = 2**7
 ! Number of abundance updates to remember for autocorrelation
-integer, parameter :: ntail = 2**8
+integer, parameter :: ntail = 2**9
 ! Length of autocorrelation vector
-integer, parameter :: corr_n = 2**3
+integer, parameter :: corr_n = 2**4
 ! Maximum time lag for autocorrelation
-real(dp), parameter :: lag_max = 2._dp
+real(dp), parameter :: lag_max = 5._dp
 ! Time step for autocorrelation
 real(dp), parameter :: corr_tstep = 1._dp*lag_max/corr_n
 
@@ -31,7 +34,7 @@ real(dp) :: alpha = 1._dp
 ! x2 production rate
 real(dp) :: beta = 1._dp
 ! Decay rates. Can always leave tau_1=1
-real(dp), dimension(2) :: tau = [1._dp, 1._dp]
+real(dp), dimension(2) :: tau = [1._dp, 2._dp]
 ! Hill function parameters
 real(dp) :: k = 1._dp
 real(dp) :: n = 1._dp
