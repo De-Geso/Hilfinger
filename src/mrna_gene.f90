@@ -4,15 +4,15 @@ use randf
 use init_mrna_gene
 implicit none
 
-! call random_seed(put=seed)
-call random_seed()
+call random_seed(put=seed)
+! call random_seed()
 
 ! Randomize variables when testing, if we so choose.
-call random_uniform(alpha, 1._dp, 5._dp)
-call random_uniform(beta, 1._dp, 5._dp)
-call random_uniform(tau(2), 0.2_dp, 1._dp)
+! call random_uniform(alpha, 1._dp, 5._dp)
+! call random_uniform(beta, 1._dp, 5._dp)
+! call random_uniform(tau(2), 0.2_dp, 1._dp)
 
-! Start abundances near their averages. Runs slightly faster, less weird starting artifacts.
+! Start abundances near their averages. Runs slightly faster, less starting artifacts.
 x(1) = alpha*tau(1); x(2) = alpha*tau(1)*beta*tau(2)
 
 open(newunit=io, file=fout, position="append", action="write")
@@ -44,7 +44,7 @@ do while (minval(nevents) < event_min)
 	
 	! Start calculating correlations once window is big enough.
 	if (ttail(1) /= 0.0) then
- 		call update_corr(corr_mean2, corr_mean(1,:), corr_mean(2,:), xtail(1,:), xtail(2,:), ttail, tstep)
+ 		call update_corr(corr_mean2, corr_mean(1,:), corr_mean(2,:), xtail(2,:), xtail(2,:), ttail, tstep)
 	end if
 
 	! Add time step to probability matrices
@@ -92,7 +92,7 @@ call dump()
 contains
 
 
-subroutine update_corr(mean2, meanx , meany, x, y, tvec, dt)
+subroutine update_corr(mean2, meanx, meany, y, x, tvec, dt)
 ! Iteratively updates autocorrelation variables (covariance and mean) every time step.
 	integer, intent(in) :: x(ntail), y(ntail)
 	real(dp), intent(in) :: tvec(ntail), dt
@@ -293,8 +293,11 @@ end function
 
 
 subroutine dump()
-	integer :: io
-	real(dp) :: t
+	real(dp) :: t, tmax
+	integer :: io, nt
+	
+	tmax = 10.
+	nt = 100*tmax
 	
 	write(*,*) "Simulation mean: ", mean
 	write(*,*) "Covariance matrix: "
@@ -309,12 +312,15 @@ subroutine dump()
 	end do
 	close(io)
 	! Autocorrelations from theory
-	open(newunit=io, file='autocorr_thry.dat', action='write')
-	do i = 1, corr_n*100
-		t = (i-1)*corr_tstep/100
-		write(io,*) t, acorr_thry(t)
+	open(1, file='corr_thry.dat', action='write')
+	open(2, file='dcorr_thry.dat', action='write')
+	do i = 1, nt
+		t = (i-1)*(tmax/(nt-1))
+		write(1,*) t, acorr_thry(t)
+		write(2,*) t, dcorr_thry(t)
 	end do
-	close(io)
+	close(1)
+	close(2)
 end subroutine
 
 
@@ -325,19 +331,54 @@ pure function acorr_thry(t) result (acorr)
 	
 	! Amm
 	acorr(1) = exp(-t/tau(1))
-	! Apm
-	acorr(2) = 0
 	! Amp
 	if (tau(1) /= tau(2)) then
-		acorr(3) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
-				* covar(1,1)/covar(2,1) * mean(1)/mean(2) / (tau(1)-tau(2))
+		acorr(2) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
+				* covar(1,1)/covar(1,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+	else 
+		acorr(2) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
+				* covar(1,1)/covar(1,2) * mean(1)/mean(2) / tau(2)
 	end if
+	! Apm
+	acorr(3) = exp(-t/tau(1))
 	! App
 	if (tau(1) /= tau(2)) then
 		acorr(4) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
 				* covar(2,1)/covar(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+	else
+		acorr(4) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
+				* covar(2,1)/covar(2,2) * mean(1)/mean(2) / tau(2)
 	end if
 end function
+
+
+pure function dcorr_thry(t) result (dcorr)
+	real(dp) :: dcorr(4)
+	real(dp), intent(in) :: t
+	! column major
+	
+	! Amm
+	dcorr(1) = -1/tau(1)*exp(-t/tau(1))
+	! Apm
+	if (tau(1) /= tau(2)) then
+		dcorr(2) = -1./tau(2)*exp(-t/tau(2)) + (exp(-t/tau(2))/tau(2) - exp(-t/tau(1))/tau(1)) &
+				*beta*tau(1)*tau(2) * covar(1,1)/covar(1,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+	else 
+		dcorr(2) = exp(-t/tau(2)) * ( -1./tau(1) + &
+				(1.-t/tau(1)) * beta * covar(1,1)/covar(1,2) * mean(1)/mean(2) )
+	end if
+	! Amp
+	dcorr(3) = -1/tau(1)*exp(-t/tau(1))
+	! App
+	if (tau(1) /= tau(2)) then
+		dcorr(4) = -1./tau(2)*exp(-t/tau(2)) + (exp(-t/tau(2))/tau(2)-exp(-t/tau(1))/tau(1)) &
+				*beta*tau(1)*tau(2) * covar(2,1)/covar(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+	else
+		dcorr(4) = -1./tau(1)*exp(-t/tau(2)) - t*exp(-t/tau(2)) &
+				* beta * covar(2,1)/covar(2,2) * mean(1)/mean(2) / tau(2)
+	end if
+end function
+
 
 !pure function R(x)
 !! Rate function for x1 production
