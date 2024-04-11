@@ -6,7 +6,6 @@ public
 
 ! Hyperparameters
 ! ======================================================================
-! Pie!
 real(dp), parameter :: pi = 4.D0*DATAN(1.D0)
 ! Repeatable seed. I ripped this seed from a random run
 integer, parameter :: seed(8)=[-1811353397, -1003849850, 1729996105, 1773249892, -1551880905, 1229063390, 556868908, -1643120466]
@@ -14,13 +13,14 @@ integer, parameter :: seed(8)=[-1811353397, -1003849850, 1729996105, 1773249892,
 integer, parameter :: event_min = 10**6
 ! Maximum abundances. Program will exit if this is exceeded
 integer, parameter :: abund_max = 2**7
-! Number of abundance updates to remember for autocorrelation
+
+! Number of abundance updates to remember for correlation
 integer, parameter :: ntail = 2**9
-! Length of autocorrelation vector
+! Length of correlation vector
 integer, parameter :: corr_n = 2**1
-! Maximum time lag for autocorrelation
+! Maximum time lag for correlation
 real(dp), parameter :: lag_max = 0.1_dp
-! Time step for autocorrelation
+! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*lag_max/corr_n
 
 
@@ -53,10 +53,10 @@ real(dp), dimension(4) :: propensity = 0.0
 integer, dimension(2) :: x = [0, 0], nevents(4)=0
 ! Probability matrices
 real(dp) :: prob_cond(abund_max, abund_max), prob(2, abund_max), prob_rate(abund_max)
-! Autocorrelation
+! Correlation
 real(dp) :: corr(corr_n), corr_mean(2,corr_n), corr_mean2(corr_n)
-! Covariance
-real(dp) :: covar(2,2), mean(2)
+! Moments
+real(dp) :: cov(2,2), mean(2)
 ! Timers
 real(dp) :: ttail(ntail) = 0._dp, t, tstep
 character(*), parameter :: fout = "mrna_accum.dat"

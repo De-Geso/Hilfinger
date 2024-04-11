@@ -69,7 +69,7 @@ prob_cond = prob_cond / sum(prob_cond)
 mean = get_mean(prob_cond)
 
 ! Get the covariances
-covar = get_covar(mean, prob_cond)
+cov = get_cov(mean, prob_cond)
 
 ! Don't know total time until end.
 corr_mean2 = corr_mean2 / t
@@ -164,8 +164,8 @@ function get_mean(p_cond) result(mean)
 	mean = matmul(p, xval)
 end function
 
-function get_covar(mean, p_cond) result(cov)
-! Get the covariance matrix.
+function get_cov(mean, p_cond) result(cov)
+! Get the coviance matrix.
 	real(dp) :: cov(2,2)
 	real(dp), intent(in) :: p_cond(:,:), mean(2)
 	real(dp) :: p(2,abund_max)
@@ -195,7 +195,7 @@ end function
 subroutine checks(pij)
 	real(dp), dimension(abund_max, abund_max), intent(in) :: pij
 	real(dp), dimension(2, abund_max) :: p
-	real(dp) :: theory_mean(2), mean(2)=0._dp, covar(2,2)=0._dp, mean_rate, theory_covar(2,2)=0._dp
+	real(dp) :: theory_mean(2), mean(2)=0._dp, cov(2,2)=0._dp, mean_rate, theory_cov(2,2)=0._dp
 	real(dp), dimension(abund_max) :: rate_values
 	integer labels(abund_max), i, j
 	
@@ -217,40 +217,40 @@ subroutine checks(pij)
 	write(*,*) 'Simulation mean: ', mean
 	
 	! Check covariances
-	covar(1,1) = dot_product(p(1,:), (labels-mean(1))**2) / mean(1)**2
-	covar(2,2) = dot_product(p(2,:), (labels-mean(2))**2) / mean(2)**2
+	cov(1,1) = dot_product(p(1,:), (labels-mean(1))**2) / mean(1)**2
+	cov(2,2) = dot_product(p(2,:), (labels-mean(2))**2) / mean(2)**2
 	do i = 1, abund_max
 	do j = 1, abund_max
-		covar(1,2) = covar(1,2) + pij(i,j)*(labels(i)-mean(1))*(labels(j)-mean(2))
-		theory_covar(1,1) = theory_covar(1,1) + pij(i,j)*(labels(i)-theory_mean(1))*(rate_values(j)-mean_rate)
+		cov(1,2) = cov(1,2) + pij(i,j)*(labels(i)-mean(1))*(labels(j)-mean(2))
+		theory_cov(1,1) = theory_cov(1,1) + pij(i,j)*(labels(i)-theory_mean(1))*(rate_values(j)-mean_rate)
 		! Notice we use labels(j), because this is for x1.
-		theory_covar(1,2) = theory_covar(1,2) + pij(i,j)*(labels(j)-theory_mean(2))*(rate_values(j)-mean_rate)
+		theory_cov(1,2) = theory_cov(1,2) + pij(i,j)*(labels(j)-theory_mean(2))*(rate_values(j)-mean_rate)
 	end do
 	end do
-	theory_covar(1,1) = theory_covar(1,1)/(theory_mean(1)*mean_rate) + 1./theory_mean(1)
-	theory_covar(1,2) = theory_covar(1,2)/(theory_mean(2)*mean_rate) * tau(2)/sum(tau) &
-		+ theory_covar(1,1) * tau(1)/sum(tau)
-	theory_covar(2,1) = theory_covar(1,2)
-	theory_covar(2,2) = theory_covar(1,2) + 1./theory_mean(2)
+	theory_cov(1,1) = theory_cov(1,1)/(theory_mean(1)*mean_rate) + 1./theory_mean(1)
+	theory_cov(1,2) = theory_cov(1,2)/(theory_mean(2)*mean_rate) * tau(2)/sum(tau) &
+		+ theory_cov(1,1) * tau(1)/sum(tau)
+	theory_cov(2,1) = theory_cov(1,2)
+	theory_cov(2,2) = theory_cov(1,2) + 1./theory_mean(2)
 	
-	covar(1,2) = covar(1,2) / (mean(1)*mean(2))
-	covar(2,1) = covar(1,2)
+	cov(1,2) = cov(1,2) / (mean(1)*mean(2))
+	cov(2,1) = cov(1,2)
 	
-	write(*,*) 'Theory covar: ', &
-		theory_covar(1,1), &
-		theory_covar(1,2), &
-		theory_covar(2,1), &
-		theory_covar(2,2)
+	write(*,*) 'Theory cov: ', &
+		theory_cov(1,1), &
+		theory_cov(1,2), &
+		theory_cov(2,1), &
+		theory_cov(2,2)
 	
-	write(*,*) "Simulation covar: ", covar(1,1), &
-		covar(1,2), &
-		covar(2,1), &
-		covar(2,2)
+	write(*,*) "Simulation cov: ", cov(1,1), &
+		cov(1,2), &
+		cov(2,1), &
+		cov(2,2)
 		
 	write(io, "(10f20.14)", advance="no") mean, theory_mean, &
-		covar(1,1), theory_covar(1,1), &
-		covar(1,2), theory_covar(1,2), &
-		covar(2,2), theory_covar(2,2)
+		cov(1,1), theory_cov(1,1), &
+		cov(1,2), theory_cov(1,2), &
+		cov(2,2), theory_cov(2,2)
 end subroutine
 
 
@@ -293,16 +293,16 @@ end function
 
 
 subroutine dump()
-	real(dp) :: t, tmax
+	real(dp) :: t, tmax, corr_thry(4), dcorr_thry(4)
 	integer :: io, nt
 	
 	tmax = 10.
 	nt = 100*tmax
 	
 	write(*,*) "Simulation mean: ", mean
-	write(*,*) "Covariance matrix: "
-	write(*,*) covar(1,1), covar(1,2)
-	write(*,*) covar(2,1), covar(2,2)
+	write(*,*) "coviance matrix: "
+	write(*,*) cov(1,1), cov(1,2)
+	write(*,*) cov(2,1), cov(2,2)
 	
 	! Correlations from simulations
 	open(newunit=io, file='corr_sim.dat', action='write')
@@ -317,15 +317,25 @@ subroutine dump()
 	open(2, file='dcorr_thry.dat', action='write')
 	do i = 1, nt
 		t = (i-1)*(tmax/(nt-1))
-		write(1,*) t, corr_thry(t)
-		write(2,*) t, dcorr_thry(t)
+		write(1,*) t, correlation_theory(t)
+		write(2,*) t, dcorrelation_theory(t)
 	end do
 	close(1)
 	close(2)
+	
+	
+	! Jerry rigged testing of derivative and step size
+	open(newunit=io, file='step_size.dat', position='append', action='write')
+	dcorr_thry = dcorrelation_theory(0._dp)
+	corr_thry = (correlation_theory(corr_tstep)-correlation_theory(0._dp))/corr_tstep
+	write(io,*) corr_tstep, (corr(2)-corr(1))/corr_tstep, dcorr_thry(4), corr_thry(4)
+	close(io)
+
+	
 end subroutine
 
 
-pure function corr_thry(t) result (corr)
+pure function correlation_theory(t) result (corr)
 	real(dp) :: corr(4)
 	real(dp), intent(in) :: t
 	! column major
@@ -335,25 +345,25 @@ pure function corr_thry(t) result (corr)
 	! Amp
 	if (tau(1) /= tau(2)) then
 		corr(2) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
-				* covar(1,1)/covar(1,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+				* cov(1,1)/cov(1,2) * mean(1)/mean(2) / (tau(1)-tau(2))
 	else 
 		corr(2) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
-				* covar(1,1)/covar(1,2) * mean(1)/mean(2) / tau(2)
+				* cov(1,1)/cov(1,2) * mean(1)/mean(2) / tau(2)
 	end if
 	! Apm
 	corr(3) = exp(-t/tau(1))
 	! App
 	if (tau(1) /= tau(2)) then
 		corr(4) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
-				* covar(2,1)/covar(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+				* cov(2,1)/cov(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
 	else
 		corr(4) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
-				* covar(2,1)/covar(2,2) * mean(1)/mean(2) / tau(2)
+				* cov(2,1)/cov(2,2) * mean(1)/mean(2) / tau(2)
 	end if
 end function
 
 
-pure function dcorr_thry(t) result (dcorr)
+pure function dcorrelation_theory(t) result (dcorr)
 	real(dp) :: dcorr(4)
 	real(dp), intent(in) :: t
 	! column major
@@ -363,20 +373,20 @@ pure function dcorr_thry(t) result (dcorr)
 	! Apm
 	if (tau(1) /= tau(2)) then
 		dcorr(2) = -1./tau(2)*exp(-t/tau(2)) + (exp(-t/tau(2))/tau(2) - exp(-t/tau(1))/tau(1)) &
-				*beta*tau(1)*tau(2) * covar(1,1)/covar(1,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+				*beta*tau(1)*tau(2) * cov(1,1)/cov(1,2) * mean(1)/mean(2) / (tau(1)-tau(2))
 	else 
 		dcorr(2) = exp(-t/tau(2)) * ( -1./tau(1) + &
-				(1.-t/tau(1)) * beta * covar(1,1)/covar(1,2) * mean(1)/mean(2) )
+				(1.-t/tau(1)) * beta * cov(1,1)/cov(1,2) * mean(1)/mean(2) )
 	end if
 	! Amp
 	dcorr(3) = -1/tau(1)*exp(-t/tau(1))
 	! App
 	if (tau(1) /= tau(2)) then
 		dcorr(4) = -1./tau(2)*exp(-t/tau(2)) + (exp(-t/tau(2))/tau(2)-exp(-t/tau(1))/tau(1)) &
-				*beta*tau(1)*tau(2) * covar(2,1)/covar(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+				*beta*tau(1)*tau(2) * cov(2,1)/cov(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
 	else
 		dcorr(4) = exp(-t/tau(2)) * ( -1./tau(1) + &
-				(1.-t/tau(1)) * beta * covar(2,1)/covar(2,2) * mean(1)/mean(2))
+				(1.-t/tau(1)) * beta * cov(2,1)/cov(2,2) * mean(1)/mean(2))
 	end if
 end function
 
