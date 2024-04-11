@@ -76,11 +76,11 @@ corr_mean2 = corr_mean2 / t
 corr_mean = corr_mean / t
 
 do i = 1, corr_n
-	! Combine the variances and means into the Pearson autocorrelation (normalized by variance)
+	! Combine the variances and means into the correlation (normalized by variance)
 	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / &
 			(corr_mean2(1)-corr_mean(1,i)*corr_mean(2,1))
 !	This works if you normalize by the mean as well. This is because our covariance is normalized by the mean
-!	but in the definition of the autocorrelation, it is not.
+!	but in the definition of the correlation, it is not.
 !	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / (covar(1,2)*mean(1)*mean(2))
 end do
 
@@ -93,7 +93,7 @@ contains
 
 
 subroutine update_corr(mean2, meanx, meany, y, x, tvec, dt)
-! Iteratively updates autocorrelation variables (covariance and mean) every time step.
+! Iteratively updates correlation variables (covariance and mean) every time step.
 	integer, intent(in) :: x(ntail), y(ntail)
 	real(dp), intent(in) :: tvec(ntail), dt
 	real(dp), intent(inout) :: mean2(corr_n), meanx(corr_n), meany(corr_n)
@@ -102,7 +102,7 @@ subroutine update_corr(mean2, meanx, meany, y, x, tvec, dt)
 	
 	! Crash if we aren't carrying enough information around
 	if (tvec(ntail)-tvec(1) < lag_max .and. tvec(1) /= 0.) then
-		write(*,*) "Error in update_autocorr: Required lag larger than recorded lag. Increase ntail."
+		write(*,*) "Error in update_corr: Required lag larger than recorded lag. Increase ntail."
 		write(*,*) "Recorded time lag: ", tvec(ntail)-tvec(1)
 		write(*,*) "Required time lag: ", lag_max
 		call exit()
@@ -304,19 +304,20 @@ subroutine dump()
 	write(*,*) covar(1,1), covar(1,2)
 	write(*,*) covar(2,1), covar(2,2)
 	
-	! Autocorrelations from simulations
-	open(newunit=io, file='autocorr_sim.dat', action='write')
+	! Correlations from simulations
+	open(newunit=io, file='corr_sim.dat', action='write')
 	do i = 1, corr_n
 		t = (i-1)*corr_tstep
 		write(io,*) t, corr(i)
 	end do
 	close(io)
-	! Autocorrelations from theory
+	
+	! Correlations and their derivative from theory
 	open(1, file='corr_thry.dat', action='write')
 	open(2, file='dcorr_thry.dat', action='write')
 	do i = 1, nt
 		t = (i-1)*(tmax/(nt-1))
-		write(1,*) t, acorr_thry(t)
+		write(1,*) t, corr_thry(t)
 		write(2,*) t, dcorr_thry(t)
 	end do
 	close(1)
@@ -324,29 +325,29 @@ subroutine dump()
 end subroutine
 
 
-pure function acorr_thry(t) result (acorr)
-	real(dp) :: acorr(4)
+pure function corr_thry(t) result (corr)
+	real(dp) :: corr(4)
 	real(dp), intent(in) :: t
 	! column major
 	
 	! Amm
-	acorr(1) = exp(-t/tau(1))
+	corr(1) = exp(-t/tau(1))
 	! Amp
 	if (tau(1) /= tau(2)) then
-		acorr(2) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
+		corr(2) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
 				* covar(1,1)/covar(1,2) * mean(1)/mean(2) / (tau(1)-tau(2))
 	else 
-		acorr(2) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
+		corr(2) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
 				* covar(1,1)/covar(1,2) * mean(1)/mean(2) / tau(2)
 	end if
 	! Apm
-	acorr(3) = exp(-t/tau(1))
+	corr(3) = exp(-t/tau(1))
 	! App
 	if (tau(1) /= tau(2)) then
-		acorr(4) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
+		corr(4) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
 				* covar(2,1)/covar(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
 	else
-		acorr(4) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
+		corr(4) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
 				* covar(2,1)/covar(2,2) * mean(1)/mean(2) / tau(2)
 	end if
 end function
@@ -374,8 +375,8 @@ pure function dcorr_thry(t) result (dcorr)
 		dcorr(4) = -1./tau(2)*exp(-t/tau(2)) + (exp(-t/tau(2))/tau(2)-exp(-t/tau(1))/tau(1)) &
 				*beta*tau(1)*tau(2) * covar(2,1)/covar(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
 	else
-		dcorr(4) = -1./tau(1)*exp(-t/tau(2)) - t*exp(-t/tau(2)) &
-				* beta * covar(2,1)/covar(2,2) * mean(1)/mean(2) / tau(2)
+		dcorr(4) = exp(-t/tau(2)) * ( -1./tau(1) + &
+				(1.-t/tau(1)) * beta * covar(2,1)/covar(2,2) * mean(1)/mean(2))
 	end if
 end function
 
