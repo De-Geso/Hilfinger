@@ -4,13 +4,13 @@ use randf
 use init_mrna_gene
 implicit none
 
-call random_seed(put=seed)
-! call random_seed()
+! call random_seed(put=seed)
+call random_seed()
 
 ! Randomize variables when testing, if we so choose.
-! call random_uniform(alpha, 1._dp, 5._dp)
-! call random_uniform(beta, 1._dp, 5._dp)
-! call random_uniform(tau(2), 0.2_dp, 1._dp)
+call random_uniform(alpha, 1._dp, 10._dp)
+call random_uniform(beta, 1._dp, 10._dp)
+call random_uniform(tau(2), 0.1_dp, 2._dp)
 
 ! Start abundances near their averages. Runs slightly faster, less starting artifacts.
 x(1) = alpha*tau(1); x(2) = alpha*tau(1)*beta*tau(2)
@@ -65,11 +65,11 @@ end do
 prob_rate = prob_rate / sum(prob_rate)
 prob_cond = prob_cond / sum(prob_cond)
 
-! Get the mean abundances
-mean = get_mean(prob_cond)
 
-! Get the covariances
-cov = get_cov(mean, prob_cond)
+! Get the simulation and theoretical moments
+mean = mean_sim(prob_cond)
+cov = covariance_sim(mean, prob_cond)
+call moments_theory(mean_thry, cov_thry)
 
 ! Don't know total time until end.
 corr_mean2 = corr_mean2 / t
@@ -84,7 +84,6 @@ do i = 1, corr_n
 !	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / (covar(1,2)*mean(1)*mean(2))
 end do
 
-call checks(prob_cond)
 call dump()
 
 
@@ -149,7 +148,7 @@ subroutine update_corr(mean2, meanx, meany, y, x, tvec, dt)
 end subroutine
 
 
-function get_mean(p_cond) result(mean)
+function mean_sim(p_cond) result(mean)
 ! Get the mean abundances.
 	real(dp) :: mean(2)
 	real(dp), intent(in) :: p_cond(abund_max, abund_max)
@@ -164,7 +163,8 @@ function get_mean(p_cond) result(mean)
 	mean = matmul(p, xval)
 end function
 
-function get_cov(mean, p_cond) result(cov)
+
+function covariance_sim(mean, p_cond) result(cov)
 ! Get the coviance matrix.
 	real(dp) :: cov(2,2)
 	real(dp), intent(in) :: p_cond(:,:), mean(2)
@@ -192,65 +192,16 @@ function get_cov(mean, p_cond) result(cov)
 end function
 
 
-subroutine checks(pij)
-	real(dp), dimension(abund_max, abund_max), intent(in) :: pij
-	real(dp), dimension(2, abund_max) :: p
-	real(dp) :: theory_mean(2), mean(2)=0._dp, cov(2,2)=0._dp, mean_rate, theory_cov(2,2)=0._dp
-	real(dp), dimension(abund_max) :: rate_values
-	integer labels(abund_max), i, j
+subroutine moments_theory(mean, cov)
+	real(dp), intent(inout) :: mean(2), cov(2,2)
 	
-	! Create probability distributions for x1 and x2 from joint
-	! probability distribution, create labels while we're at it.
-	do i = 1, abund_max
-		rate_values(i) = alpha
-		labels(i) = i-1
-		p(1,i) = sum(pij(i,:))
-		p(2,i) = sum(pij(:,i))
-	end do
+	mean(1) = alpha*tau(1)
+	mean(2) = mean(1)*beta*tau(2)
 	
-	! Check means
-	mean_rate = dot_product(rate_values, prob_rate)
-	theory_mean(1) = mean_rate*tau(1)
-	theory_mean(2) = theory_mean(1)*beta*tau(2)
-	mean = matmul(p, labels)
-	write(*,*) 'Theory mean: ', theory_mean
-	write(*,*) 'Simulation mean: ', mean
-	
-	! Check covariances
-	cov(1,1) = dot_product(p(1,:), (labels-mean(1))**2) / mean(1)**2
-	cov(2,2) = dot_product(p(2,:), (labels-mean(2))**2) / mean(2)**2
-	do i = 1, abund_max
-	do j = 1, abund_max
-		cov(1,2) = cov(1,2) + pij(i,j)*(labels(i)-mean(1))*(labels(j)-mean(2))
-		theory_cov(1,1) = theory_cov(1,1) + pij(i,j)*(labels(i)-theory_mean(1))*(rate_values(j)-mean_rate)
-		! Notice we use labels(j), because this is for x1.
-		theory_cov(1,2) = theory_cov(1,2) + pij(i,j)*(labels(j)-theory_mean(2))*(rate_values(j)-mean_rate)
-	end do
-	end do
-	theory_cov(1,1) = theory_cov(1,1)/(theory_mean(1)*mean_rate) + 1./theory_mean(1)
-	theory_cov(1,2) = theory_cov(1,2)/(theory_mean(2)*mean_rate) * tau(2)/sum(tau) &
-		+ theory_cov(1,1) * tau(1)/sum(tau)
-	theory_cov(2,1) = theory_cov(1,2)
-	theory_cov(2,2) = theory_cov(1,2) + 1./theory_mean(2)
-	
-	cov(1,2) = cov(1,2) / (mean(1)*mean(2))
+	cov(1,1) = 1./mean(1)
+	cov(1,2) = cov(1,1) * tau(1)/sum(tau)
 	cov(2,1) = cov(1,2)
-	
-	write(*,*) 'Theory cov: ', &
-		theory_cov(1,1), &
-		theory_cov(1,2), &
-		theory_cov(2,1), &
-		theory_cov(2,2)
-	
-	write(*,*) "Simulation cov: ", cov(1,1), &
-		cov(1,2), &
-		cov(2,1), &
-		cov(2,2)
-		
-	write(io, "(10f20.14)", advance="no") mean, theory_mean, &
-		cov(1,1), theory_cov(1,1), &
-		cov(1,2), theory_cov(1,2), &
-		cov(2,2), theory_cov(2,2)
+	cov(2,2) = cov(1,2) + 1./mean(2)
 end subroutine
 
 
@@ -299,10 +250,13 @@ subroutine dump()
 	tmax = 10.
 	nt = 100*tmax
 	
+	write(*,*) "Theoretical Mean: ", mean_thry
 	write(*,*) "Simulation mean: ", mean
-	write(*,*) "coviance matrix: "
-	write(*,*) cov(1,1), cov(1,2)
-	write(*,*) cov(2,1), cov(2,2)
+	
+	write(*,*) "Theoretical covariance matrix: "
+	write(*,*) cov_thry
+	write(*,*) "Simulation covariance matrix: "
+	write(*,*) cov
 	
 	! Correlations from simulations
 	open(newunit=io, file='corr_sim.dat', action='write')
@@ -328,7 +282,11 @@ subroutine dump()
 	open(newunit=io, file='step_size.dat', position='append', action='write')
 	dcorr_thry = dcorrelation_theory(0._dp)
 	corr_thry = (correlation_theory(corr_tstep)-correlation_theory(0._dp))/corr_tstep
-	write(io,*) corr_tstep, (corr(2)-corr(1))/corr_tstep, dcorr_thry(4), corr_thry(4)
+	write(io,*) corr_tstep, &
+			-1./tau(2)/mean_thry(2), &
+			cov(2,2)*(corr(2)-corr(1))/corr_tstep, &
+			cov_thry(2,2)*dcorr_thry(4), &
+			cov_thry(2,2)*corr_thry(4)
 	close(io)
 
 	
@@ -345,20 +303,20 @@ pure function correlation_theory(t) result (corr)
 	! Amp
 	if (tau(1) /= tau(2)) then
 		corr(2) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
-				* cov(1,1)/cov(1,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+				* cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
 	else 
 		corr(2) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
-				* cov(1,1)/cov(1,2) * mean(1)/mean(2) / tau(2)
+				* cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) / tau(2)
 	end if
 	! Apm
 	corr(3) = exp(-t/tau(1))
 	! App
 	if (tau(1) /= tau(2)) then
 		corr(4) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
-				* cov(2,1)/cov(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+				* cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
 	else
 		corr(4) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
-				* cov(2,1)/cov(2,2) * mean(1)/mean(2) / tau(2)
+				* cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2) / tau(2)
 	end if
 end function
 
@@ -373,20 +331,20 @@ pure function dcorrelation_theory(t) result (dcorr)
 	! Apm
 	if (tau(1) /= tau(2)) then
 		dcorr(2) = -1./tau(2)*exp(-t/tau(2)) + (exp(-t/tau(2))/tau(2) - exp(-t/tau(1))/tau(1)) &
-				*beta*tau(1)*tau(2) * cov(1,1)/cov(1,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+				*beta*tau(1)*tau(2) * cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
 	else 
 		dcorr(2) = exp(-t/tau(2)) * ( -1./tau(1) + &
-				(1.-t/tau(1)) * beta * cov(1,1)/cov(1,2) * mean(1)/mean(2) )
+				(1.-t/tau(1)) * beta * cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) )
 	end if
 	! Amp
 	dcorr(3) = -1/tau(1)*exp(-t/tau(1))
 	! App
 	if (tau(1) /= tau(2)) then
 		dcorr(4) = -1./tau(2)*exp(-t/tau(2)) + (exp(-t/tau(2))/tau(2)-exp(-t/tau(1))/tau(1)) &
-				*beta*tau(1)*tau(2) * cov(2,1)/cov(2,2) * mean(1)/mean(2) / (tau(1)-tau(2))
+				*beta*tau(1)*tau(2) * cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
 	else
 		dcorr(4) = exp(-t/tau(2)) * ( -1./tau(1) + &
-				(1.-t/tau(1)) * beta * cov(2,1)/cov(2,2) * mean(1)/mean(2))
+				(1.-t/tau(1)) * beta * cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2))
 	end if
 end function
 
@@ -408,5 +366,66 @@ end function
 !	hill = 1._dp / (1. + (1._dp*x/k)**n)
 !end function
 
+
+!subroutine checks(pij)
+!	real(dp), dimension(abund_max, abund_max), intent(in) :: pij
+!	real(dp), dimension(2, abund_max) :: p
+!	real(dp) :: theory_mean(2), mean(2)=0._dp, cov(2,2)=0._dp, mean_rate, theory_cov(2,2)=0._dp
+!	real(dp), dimension(abund_max) :: rate_values
+!	integer labels(abund_max), i, j
+	
+!	! Create probability distributions for x1 and x2 from joint
+!	! probability distribution, create labels while we're at it.
+!	do i = 1, abund_max
+!		rate_values(i) = alpha
+!		labels(i) = i-1
+!		p(1,i) = sum(pij(i,:))
+!		p(2,i) = sum(pij(:,i))
+!	end do
+	
+!	! Check means
+!	mean_rate = dot_product(rate_values, prob_rate)
+!	theory_mean(1) = mean_rate*tau(1)
+!	theory_mean(2) = theory_mean(1)*beta*tau(2)
+!	mean = matmul(p, labels)
+!	write(*,*) 'Theory mean: ', theory_mean
+!	write(*,*) 'Simulation mean: ', mean
+	
+!	! Check covariances
+!	cov(1,1) = dot_product(p(1,:), (labels-mean(1))**2) / mean(1)**2
+!	cov(2,2) = dot_product(p(2,:), (labels-mean(2))**2) / mean(2)**2
+!	do i = 1, abund_max
+!	do j = 1, abund_max
+!		cov(1,2) = cov(1,2) + pij(i,j)*(labels(i)-mean(1))*(labels(j)-mean(2))
+!		theory_cov(1,1) = theory_cov(1,1) + pij(i,j)*(labels(i)-theory_mean(1))*(rate_values(j)-mean_rate)
+!		! Notice we use labels(j), because this is for x1.
+!		theory_cov(1,2) = theory_cov(1,2) + pij(i,j)*(labels(j)-theory_mean(2))*(rate_values(j)-mean_rate)
+!	end do
+!	end do
+!	theory_cov(1,1) = theory_cov(1,1)/(theory_mean(1)*mean_rate) + 1./theory_mean(1)
+!	theory_cov(1,2) = theory_cov(1,2)/(theory_mean(2)*mean_rate) * tau(2)/sum(tau) &
+!		+ theory_cov(1,1) * tau(1)/sum(tau)
+!	theory_cov(2,1) = theory_cov(1,2)
+!	theory_cov(2,2) = theory_cov(1,2) + 1./theory_mean(2)
+	
+!	cov(1,2) = cov(1,2) / (mean(1)*mean(2))
+!	cov(2,1) = cov(1,2)
+	
+!	write(*,*) 'Theory cov: ', &
+!		theory_cov(1,1), &
+!		theory_cov(1,2), &
+!		theory_cov(2,1), &
+!		theory_cov(2,2)
+	
+!	write(*,*) "Simulation cov: ", cov(1,1), &
+!		cov(1,2), &
+!		cov(2,1), &
+!		cov(2,2)
+		
+!	write(io, "(10f20.14)", advance="no") mean, theory_mean, &
+!		cov(1,1), theory_cov(1,1), &
+!		cov(1,2), theory_cov(1,2), &
+!		cov(2,2), theory_cov(2,2)
+!end subroutine
 
 end program
