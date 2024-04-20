@@ -12,14 +12,14 @@ integer, parameter :: seed(8)=[-1811353397, -1003849850, 1729996105, 1773249892,
 ! Number of events before stopping
 integer, parameter :: event_min = 10**6
 ! Maximum abundances. Program will exit if this is exceeded
-integer, parameter :: abund_max = 2**9
+integer, parameter :: abund_max = 2**10
 
 ! Number of abundance updates to remember for correlation
-integer, parameter :: ntail = 2**8
+integer, parameter :: ntail = 2**5
 ! Length of correlation vector
 integer, parameter :: corr_n = 2**1
 ! Maximum time lag for correlation
-real(dp), parameter :: lag_max = 1._dp
+real(dp), parameter :: lag_max = 0.00001_dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*lag_max/corr_n
 

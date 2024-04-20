@@ -2,6 +2,7 @@ program mrna_gean
 use kind_parameters
 use randf
 use init_mrna_gene
+use utilities
 implicit none
 
 ! call random_seed(put=seed)
@@ -10,14 +11,10 @@ call random_seed()
 ! Randomize variables when testing, if we so choose.
 call random_uniform(alpha, 1._dp, 10._dp)
 call random_uniform(beta, 1._dp, 10._dp)
-call random_uniform(tau(2), 0.1_dp, 2._dp)
+call random_uniform(tau(2), 1.0_dp, 10._dp)
 
 ! Start abundances near their averages. Runs slightly faster, less starting artifacts.
 x(1) = alpha*tau(1); x(2) = alpha*tau(1)*beta*tau(2)
-
-open(newunit=io, file=fout, position="append", action="write")
-write(io, "(4f20.14)", advance="no") alpha, beta, tau
-write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
 
 prob_cond = 0._dp 
 prob_rate = 0._dp
@@ -250,14 +247,25 @@ subroutine dump()
 	tmax = 10.
 	nt = 100*tmax
 	
+	write(*,*) "Events: ", event_min
+	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+	! === Console output ===
 	write(*,*) "Theoretical Mean: ", mean_thry
 	write(*,*) "Simulation mean: ", mean
+	write(*,*) "Percent difference: ", &
+			percent_difference(mean_thry(1), mean(1)), &
+			percent_difference(mean_thry(2), mean(2))
 	
 	write(*,*) "Theoretical covariance matrix: "
 	write(*,*) cov_thry
 	write(*,*) "Simulation covariance matrix: "
 	write(*,*) cov
-	
+	write(*,*) "Percent difference: "
+	write(*,*) percent_difference(cov_thry(1,1), cov(1,1)), &
+			percent_difference(cov_thry(2,1), cov(2,1)), &
+			percent_difference(cov_thry(1,2), cov(1,2)), &
+			percent_difference(cov_thry(2,2), cov(2,2))
+			
 	! Correlations from simulations
 	open(newunit=io, file='corr_sim.dat', action='write')
 	do i = 1, corr_n
@@ -347,7 +355,7 @@ pure function dcorrelation_theory(t) result (dcorr)
 				(1.-t/tau(1)) * beta * cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2))
 	end if
 end function
-
+	
 
 !pure function R(x)
 !! Rate function for x1 production

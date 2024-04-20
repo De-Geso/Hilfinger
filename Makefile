@@ -17,7 +17,8 @@ BINDIR:= bin/
 NAMES := mrna_gene.f90 \
 	kind_parameters.f90 \
 	init_mrna_gene.f90 \
-	randf.f90
+	randf.f90 \
+	utilities.f90
 
 # Create lists of the build artefacts in this project
 SRCS := $(addprefix $(PATHIN), $(NAMES))
@@ -36,11 +37,13 @@ mrna_gene: $(OBJS)
 
 
 # define dependencies between object files
-src/mrna_gene.f90.o: src/kind_parameters.f90.o src/init_mrna_gene.f90.o src/randf.f90.o
+src/mrna_gene.f90.o: src/kind_parameters.f90.o src/init_mrna_gene.f90.o src/randf.f90.o src/utilities.f90.o
 
 src/init_mrna_gene.f90.o: src/kind_parameters.f90.o
 
 src/randf.f90.o: src/kind_parameters.f90.o
+
+src/utilities.f90.o: src/kind_parameters.f90.o
 
 # rebuild all object files in case this Makefile changes
 $(OBJS): $(MAKEFILE_LIST)

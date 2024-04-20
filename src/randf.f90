@@ -1,3 +1,4 @@
+! Random functions to convert random numbers to whatever distribution we like.
 module randf
 use kind_parameters
 implicit none
