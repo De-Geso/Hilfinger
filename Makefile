@@ -6,9 +6,9 @@ MAKEFLAGS += --no-builtin-rules --no-builtin-variables
 # Configuration settings
 FC := gfortran
 LD := $(FC)
-FFLAGS := -O3
+FFLAGS := -O3 -fopenmp
 LDLIBS :=
-LDFLAGS := -I/usr/include/
+LDFLAGS := -I/usr/include/ -O3 -fopenmp
 RM := rm -f
 
 # List of all source files

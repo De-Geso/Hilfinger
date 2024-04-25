@@ -3,18 +3,22 @@ use kind_parameters
 use randf
 use init_mrna_gene
 use utilities
+use omp_lib
 implicit none
 
-! call random_seed(put=seed)
+!call random_seed(put=seed)
 call random_seed()
 
 ! Randomize variables when testing, if we so choose.
-call random_uniform(alpha, 1._dp, 10._dp)
-call random_uniform(beta, 1._dp, 10._dp)
-call random_uniform(tau(2), 1.0_dp, 10._dp)
+call random_uniform(roll, -1._dp, 1._dp)
+alpha = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+beta = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+tau(2) = 10._dp**roll
 
-! Start abundances near their averages. Runs slightly faster, less starting artifacts.
-x(1) = alpha*tau(1); x(2) = alpha*tau(1)*beta*tau(2)
+x(1) = 0
+x(2) = 0
 
 prob_cond = 0._dp 
 prob_rate = 0._dp
@@ -26,6 +30,7 @@ do while (minval(nevents) < event_min)
 	! If we go over maximum abundance, stop.
 	if (maxval(x) >= abund_max) then
 		write(*,*) "Maximum abundance exceeded."
+		write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
 		call exit()
 	end if
 
@@ -41,7 +46,18 @@ do while (minval(nevents) < event_min)
 	
 	! Start calculating correlations once window is big enough.
 	if (ttail(1) /= 0.0) then
- 		call update_corr(corr_mean2, corr_mean(1,:), corr_mean(2,:), xtail(2,:), xtail(2,:), ttail, tstep)
+		!$omp parallel
+		!$omp sections
+		!$omp section
+		call update_corr(corr_mean2(:,1), corr_mean(1,:,1), corr_mean(2,:,1), xtail(1,:), xtail(1,:), ttail, tstep)
+		!$omp section
+		call update_corr(corr_mean2(:,2), corr_mean(1,:,2), corr_mean(2,:,2), xtail(2,:), xtail(1,:), ttail, tstep)
+		!$omp section
+		call update_corr(corr_mean2(:,3), corr_mean(1,:,3), corr_mean(2,:,3), xtail(1,:), xtail(2,:), ttail, tstep)
+		!$omp section
+		call update_corr(corr_mean2(:,4), corr_mean(1,:,4), corr_mean(2,:,4), xtail(2,:), xtail(2,:), ttail, tstep)
+		!$omp end sections
+		!$omp end parallel
 	end if
 
 	! Add time step to probability matrices
@@ -62,30 +78,34 @@ end do
 prob_rate = prob_rate / sum(prob_rate)
 prob_cond = prob_cond / sum(prob_cond)
 
-
 ! Get the simulation and theoretical moments
 mean = mean_sim(prob_cond)
 cov = covariance_sim(mean, prob_cond)
 call moments_theory(mean_thry, cov_thry)
 
-! Don't know total time until end.
+! Normalize correlation means.
 corr_mean2 = corr_mean2 / t
 corr_mean = corr_mean / t
 
-do i = 1, corr_n
-	! Combine the variances and means into the correlation (normalized by variance)
-	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / &
-			(corr_mean2(1)-corr_mean(1,i)*corr_mean(2,1))
-!	This works if you normalize by the mean as well. This is because our covariance is normalized by the mean
-!	but in the definition of the correlation, it is not.
-!	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / (covar(1,2)*mean(1)*mean(2))
+do j = 1, 4
+	do i = 1, corr_n
+		! Combine the variances and means into the correlation (normalized by variance)
+		corr(i,j) = (corr_mean2(i,j) - corr_mean(1,i,j)*corr_mean(2,1,j)) / &
+				(corr_mean2(1,j)-corr_mean(1,i,j)*corr_mean(2,1,j))
+	!	This works if you normalize by the mean as well. This is because our covariance is normalized by the mean
+	!	but in the definition of the correlation, it is not.
+	!	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / (covar(1,2)*mean(1)*mean(2))
+	end do
 end do
+
+dcorr = -1._dp/tau(2) * (corr(:,4) - corr(:,3)*cov(1,2)/cov(2,2))
 
 call dump()
 
 
-! Functions and Subroutines ============================================
+
 contains
+
 
 
 subroutine update_corr(mean2, meanx, meany, y, x, tvec, dt)
@@ -101,6 +121,7 @@ subroutine update_corr(mean2, meanx, meany, y, x, tvec, dt)
 		write(*,*) "Error in update_corr: Required lag larger than recorded lag. Increase ntail."
 		write(*,*) "Recorded time lag: ", tvec(ntail)-tvec(1)
 		write(*,*) "Required time lag: ", lag_max
+		write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
 		call exit()
 	end if
 	
@@ -240,67 +261,6 @@ pure function update_propensity(x) result(propensity)
 end function
 
 
-subroutine dump()
-	real(dp) :: t, tmax, corr_thry(4), dcorr_thry(4)
-	integer :: io, nt
-	
-	tmax = 10.
-	nt = 100*tmax
-	
-	write(*,*) "Events: ", event_min
-	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
-	! === Console output ===
-	write(*,*) "Theoretical Mean: ", mean_thry
-	write(*,*) "Simulation mean: ", mean
-	write(*,*) "Percent difference: ", &
-			percent_difference(mean_thry(1), mean(1)), &
-			percent_difference(mean_thry(2), mean(2))
-	
-	write(*,*) "Theoretical covariance matrix: "
-	write(*,*) cov_thry
-	write(*,*) "Simulation covariance matrix: "
-	write(*,*) cov
-	write(*,*) "Percent difference: "
-	write(*,*) percent_difference(cov_thry(1,1), cov(1,1)), &
-			percent_difference(cov_thry(2,1), cov(2,1)), &
-			percent_difference(cov_thry(1,2), cov(1,2)), &
-			percent_difference(cov_thry(2,2), cov(2,2))
-			
-	! Correlations from simulations
-	open(newunit=io, file='corr_sim.dat', action='write')
-	do i = 1, corr_n
-		t = (i-1)*corr_tstep
-		write(io,*) t, corr(i)
-	end do
-	close(io)
-	
-	! Correlations and their derivative from theory
-	open(1, file='corr_thry.dat', action='write')
-	open(2, file='dcorr_thry.dat', action='write')
-	do i = 1, nt
-		t = (i-1)*(tmax/(nt-1))
-		write(1,*) t, correlation_theory(t)
-		write(2,*) t, dcorrelation_theory(t)
-	end do
-	close(1)
-	close(2)
-	
-	
-	! Jerry rigged testing of derivative and step size
-	open(newunit=io, file='step_size.dat', position='append', action='write')
-	dcorr_thry = dcorrelation_theory(0._dp)
-	corr_thry = (correlation_theory(corr_tstep)-correlation_theory(0._dp))/corr_tstep
-	write(io,*) corr_tstep, &
-			-1./tau(2)/mean_thry(2), &
-			cov(2,2)*(corr(2)-corr(1))/corr_tstep, &
-			cov_thry(2,2)*dcorr_thry(4), &
-			cov_thry(2,2)*corr_thry(4)
-	close(io)
-
-	
-end subroutine
-
-
 pure function correlation_theory(t) result (corr)
 	real(dp) :: corr(4)
 	real(dp), intent(in) :: t
@@ -330,6 +290,7 @@ end function
 
 
 pure function dcorrelation_theory(t) result (dcorr)
+	! THESE ARE NORMALIZED BY sigma_ij!!! Don't get it twisted.
 	real(dp) :: dcorr(4)
 	real(dp), intent(in) :: t
 	! column major
@@ -355,7 +316,88 @@ pure function dcorrelation_theory(t) result (dcorr)
 				(1.-t/tau(1)) * beta * cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2))
 	end if
 end function
+
+
+subroutine dump()
+	real(dp) :: t, tmax, corr_thry(4), dcorr_thry(4), chi2
+	integer :: io, nt
 	
+	tmax = lag_max
+	nt = 100*corr_n
+	
+! Console output =======================================================
+	write(*,*) "Events: ", event_min
+	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+	write(*,*) "Theoretical Mean: ", mean_thry
+	write(*,*) "Simulation mean: ", mean
+	write(*,*) "Percent difference: ", &
+			percent_difference(mean_thry(1), mean(1)), &
+			percent_difference(mean_thry(2), mean(2))
+	
+	write(*,*) "Theoretical covariance matrix: "
+	write(*,*) cov_thry
+	write(*,*) "Simulation covariance matrix: "
+	write(*,*) cov
+	write(*,*) "Percent difference: "
+	write(*,*) percent_difference(cov_thry(1,1), cov(1,1)), &
+			percent_difference(cov_thry(2,1), cov(2,1)), &
+			percent_difference(cov_thry(1,2), cov(1,2)), &
+			percent_difference(cov_thry(2,2), cov(2,2))
+! End console output ===================================================
+
+	! Correlations from simulations
+	open(newunit=io, file='corr_sim.dat', action='write')
+	do i = 1, corr_n
+		t = (i-1)*corr_tstep
+		write(io,*) t, corr(i,:), dcorr(i)
+	end do
+	close(io)
+	
+	! Correlations and their derivative from theory
+	open(1, file='corr_thry.dat', action='write')
+	open(2, file='dcorr_thry.dat', action='write')
+	do i = 1, nt
+		t = (i-1)*(tmax/(nt-1))
+		write(1,*) t, correlation_theory(t)
+		write(2,*) t, dcorrelation_theory(t)
+	end do
+	close(1)
+	close(2)
+	
+	! Reduced chi squared
+	chi2 = 0._dp
+	do i = 1, corr_n
+		t = (i-1)*corr_tstep
+		dcorr_thry = dcorrelation_theory(t)
+		chi2 = chi2 + (dcorr(i) - dcorr_thry(4))**2 / corr_n
+	end do
+	open(newunit=io, file='chi_squared.dat', action='write', position='append')
+		write(io,*) chi2, corr_n, sum(nevents), lag_max, alpha, beta, tau
+	close(io)
+	
+	open(newunit=io, file='percent_difference.dat', action='write', position='append')
+		write(io,*) alpha, beta, tau, event_min, &
+			percent_difference(mean_thry(1), mean(1)), &
+			percent_difference(mean_thry(2), mean(2)), &
+			percent_difference(cov_thry(1,1), cov(1,1)), &
+			percent_difference(cov_thry(2,1), cov(2,1)), &
+			percent_difference(cov_thry(1,2), cov(1,2)), &
+			percent_difference(cov_thry(2,2), cov(2,2))
+	close(io)
+	
+	
+	! Jerry rigged testing of derivative and step size
+!	open(newunit=io, file='step_size.dat', position='append', action='write')
+!	dcorr_thry = dcorrelation_theory(0._dp)
+!	corr_thry = (correlation_theory(corr_tstep)-correlation_theory(0._dp))/corr_tstep
+!	write(io,*) corr_tstep, &
+!			-1./tau(2)/mean_thry(2), &
+!			cov(2,2)*(corr(2)-corr(1))/corr_tstep, &
+!			cov_thry(2,2)*dcorr_thry(4), &
+!			cov_thry(2,2)*corr_thry(4)
+!	close(io)
+end subroutine
+
 
 !pure function R(x)
 !! Rate function for x1 production

@@ -12,16 +12,17 @@ integer, parameter :: seed(8)=[-1811353397, -1003849850, 1729996105, 1773249892,
 ! Number of events before stopping
 integer, parameter :: event_min = 10**6
 ! Maximum abundances. Program will exit if this is exceeded
-integer, parameter :: abund_max = 2**10
+integer, parameter :: abund_max = 10**3
 
-! Number of abundance updates to remember for correlation
-integer, parameter :: ntail = 2**5
+! Number of abundance updates to remember for correlation.
+! Reducing this gives big time savings.
+integer, parameter :: ntail = 2**10
 ! Length of correlation vector
-integer, parameter :: corr_n = 2**1
+integer, parameter :: corr_n = 2**4
 ! Maximum time lag for correlation
-real(dp), parameter :: lag_max = 0.00001_dp
+real(dp), parameter :: lag_max = 3._dp
 ! Time step for correlation
-real(dp), parameter :: corr_tstep = 1._dp*lag_max/corr_n
+real(dp), parameter :: corr_tstep = 1._dp*lag_max/(corr_n-1)
 
 
 
@@ -54,14 +55,17 @@ integer, dimension(2) :: x = [0, 0], nevents(4)=0
 ! Probability matrices
 real(dp) :: prob_cond(abund_max, abund_max), prob(2, abund_max), prob_rate(abund_max)
 ! Correlation
-real(dp) :: corr(corr_n), corr_mean(2,corr_n), corr_mean2(corr_n)
+real(dp) :: corr(corr_n, 4), corr_mean(2, corr_n, 4), corr_mean2(corr_n, 4)
+real(dp) :: dcorr(corr_n)
 ! Moments
 real(dp) :: mean(2), cov(2,2), mean_thry(2), cov_thry(2,2)
 ! Timers
 real(dp) :: ttail(ntail) = 0._dp, t, tstep
+
+real(dp) :: roll
 character(*), parameter :: fout = "mrna_accum.dat"
 integer :: xtail(2, ntail) = 0
-integer :: i, event, io
+integer :: i, j, event, io
 
 
 end module init_mrna_gene
