@@ -7,8 +7,6 @@ public
 ! Hyperparameters
 ! ======================================================================
 real(dp), parameter :: pi = 4.D0*DATAN(1.D0)
-! Repeatable seed. I ripped this seed from a random run
-integer, parameter :: seed(8)=[-1811353397, -1003849850, 1729996105, 1773249892, -1551880905, 1229063390, 556868908, -1643120466]
 ! Number of events before stopping
 integer, parameter :: event_min = 10**6
 ! Maximum abundances. Program will exit if this is exceeded
@@ -16,35 +14,35 @@ integer, parameter :: abund_max = 10**3
 
 ! Number of abundance updates to remember for correlation.
 ! Reducing this gives big time savings.
-integer, parameter :: ntail = 2**10
+integer, parameter :: ntail = 2**4
 ! Length of correlation vector
 integer, parameter :: corr_n = 2**4
 ! Maximum time lag for correlation
-real(dp), parameter :: lag_max = 3._dp
+real(dp), parameter :: lag_max = 0.1_dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*lag_max/(corr_n-1)
 
 
 
-! Parameters
-! ======================================================================
-! Size of burst for [x0, x1]
-integer, parameter, dimension(2) :: burst = [1, 1]
-! x1 production rate
-real(dp) :: alpha = 1._dp
-! x2 production rate
-real(dp) :: beta = 1._dp
-! Decay rates. Can always leave tau_1=1
-real(dp), dimension(2) :: tau = [1._dp, 1._dp]
-! Hill function parameters
-real(dp) :: k = 1._dp
-real(dp) :: n = 1._dp
-! Abundance update matrix.
-integer, parameter, dimension(2,4) :: abund_update = &
-	reshape((/burst(1), 0, &
-			-1, 0, &
-			0, burst(2), &
-			0, -1/), shape(abund_update))
+!! Parameters
+!! ======================================================================
+!! Size of burst for [x0, x1]
+!integer, parameter, dimension(2) :: burst = [1, 1]
+!! x1 production rate
+!real(dp) :: alpha = 1._dp
+!! x2 production rate
+!real(dp) :: beta = 1._dp
+!! Decay rates. Can always leave tau_1=1
+!real(dp), dimension(2) :: tau = [1._dp, 1._dp]
+!! Hill function parameters
+!real(dp) :: k = 1._dp
+!real(dp) :: n = 1._dp
+!! Abundance update matrix.
+!integer, parameter, dimension(2,4) :: abund_update = &
+!	reshape((/burst(1), 0, &
+!			-1, 0, &
+!			0, burst(2), &
+!			0, -1/), shape(abund_update))
 
 ! Variables
 ! ======================================================================

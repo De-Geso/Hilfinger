@@ -4,6 +4,9 @@ use kind_parameters
 implicit none
 public
 
+! Repeatable seed. I ripped this seed from a random run
+integer, parameter :: seed(8)=[-1811353397, -1003849850, 1729996105, 1773249892, -1551880905, 1229063390, 556868908, -1643120466]
+
 contains
 
 subroutine random_exp(L, u)

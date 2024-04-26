@@ -1,21 +1,23 @@
-program mrna_gean
+program mrna_gene
 use kind_parameters
 use randf
 use init_mrna_gene
+use mrna_protein_system_parameters
 use utilities
 use omp_lib
 implicit none
 
-!call random_seed(put=seed)
-call random_seed()
+call random_seed(put=seed)
+write(*,*) seed
+! call random_seed()
 
 ! Randomize variables when testing, if we so choose.
-call random_uniform(roll, -1._dp, 1._dp)
-alpha = 10._dp**roll
-call random_uniform(roll, -1._dp, 1._dp)
-beta = 10._dp**roll
-call random_uniform(roll, -1._dp, 1._dp)
-tau(2) = 10._dp**roll
+! call random_uniform(roll, -1._dp, 1._dp)
+! alpha = 10._dp**roll
+! call random_uniform(roll, -1._dp, 1._dp)
+! beta = 10._dp**roll
+! call random_uniform(roll, -1._dp, 1._dp)
+! tau(2) = 10._dp**roll
 
 x(1) = 0
 x(2) = 0
@@ -254,10 +256,10 @@ pure function update_propensity(x) result(propensity)
 ! Updates propensities depending on the state of the system
 	integer, intent(in) :: x(2)
 	real(dp) :: propensity(4)
-	propensity(1) = alpha	! Make x1 (mRNA)
-	propensity(2) = x(1)/tau(1)	! Degrade x1 (mRNA)
-	propensity(3) = beta*x(1)	! Make x2 (Protein)
-	propensity(4) = x(2)/tau(2)	! Degrade x2 (Protein)
+	propensity(1) = 1._dp*alpha	! Make x1 (mRNA)
+	propensity(2) = 1._dp*x(1)/tau(1)	! Degrade x1 (mRNA)
+	propensity(3) = 1._dp*beta*x(1)	! Make x2 (Protein)
+	propensity(4) = 1._dp*x(2)/tau(2)	! Degrade x2 (Protein)
 end function
 
 
