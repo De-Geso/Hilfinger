@@ -1,7 +1,8 @@
 program mrna_protein_feedback
 use kind_parameters
-use mrna_protein_system_parameters
 use randf
+use mrna_protein_system_parameters
+use utilities
 implicit none
 
 ! Program Hyperparameters ==============================================
@@ -14,14 +15,19 @@ integer, parameter :: abund_max = 2**6
 ! Time
 real(dp) :: t=0._dp, tstep
 ! Probabilities
-real(dp) :: pcond(abund_max, abund_max)=0._dp, prate(abund_max)=0._dp, &
-	p(abund_max,2)=0._dp
+real(dp) :: pcond(abund_max, abund_max)=0._dp
+! Moments
+real(dp) :: mean(2), mean_rate, cov(2,2)
 ! Miscellaneous 
-real(dp) :: propensity(4), mean(2)
+real(dp) :: propensity(4)
 integer :: i, mp(2)=0, nevents(4)=0, event
+
+
 
 call random_seed(put=seed)
 ! call random_seed()
+
+
 
 do while (minval(nevents) < event_min)
 	! Exit the program if we exceed maximum abundance.
@@ -38,10 +44,7 @@ do while (minval(nevents) < event_min)
 
 	! Add time step to probability matrices
 	pcond(mp(1)+1, mp(2)+1) = pcond(mp(1)+1, mp(2)+1) + tstep
-	prate(mp(2)+1) = prate(mp(2)+1) + tstep
-	p(mp(1)+1,1) = p(mp(1)+1,1) + tstep
-	p(mp(2)+1,2) = p(mp(2)+1,2) + tstep
-
+	
 	! Update abundances LAST
 	mp = mp + abund_update(:,event)
 	nevents(event) = nevents(event) + 1
@@ -49,13 +52,57 @@ end do
 
 ! Normalize probabilities.
 pcond = pcond / sum(pcond)
-prate = prate / sum(prate)
-p = p / (sum(p)/2)
 
-mean = simulation_mean(pcond)
+call simulation_moments(pcond, mean, mean_rate, cov)
 write(*,*) mean
+write(*,*) mean_rate
+write(*,*) cov
+
+
 
 contains
+
+
+
+subroutine simulation_moments(pcond, mean, mean_rate, cov)
+! Calculate mean abundances and covariance matrix (eta--normalized)
+! from conditional probability distribution.
+	real(dp), intent(out) :: mean(2), mean_rate, cov(2,2)
+	real(dp), intent(in) :: pcond(abund_max, abund_max)
+	real(dp) :: p(abund_max, 2)
+	integer :: i, j, x(abund_max)
+	
+	! First moments
+	! Abundance means
+	do i = 1, abund_max
+		x(i) = i-1
+		p(i,1) = sum(pcond(i,:))
+		p(i,2) = sum(pcond(:,i))
+	end do
+	mean = matmul(x,p)
+	
+	! Rate means
+	mean_rate = 0._dp
+	do i = 1, abund_max
+	do j = 1, abund_max
+		mean_rate = mean_rate + pcond(i,j)*R([x(i),x(j)])
+	end do
+	end do
+	
+	! Second moments
+	cov = 0._dp
+	! Diagonal covariances are just variances.
+	cov(1,1) = dot_product(p(:,1), (x-mean(1))**2) / mean(1)**2
+	cov(2,2) = dot_product(p(:,2), (x-mean(2))**2) / mean(2)**2
+	! Off diagonal covariances are symmetric.
+	do i = 1, abund_max
+	do j = 1, abund_max
+		! THESE ARE ETAS. THEY ARE NORMALIZED BY THE MEAN^2
+		cov(1,2) = cov(1,2) + (pcond(i,j)*(x(i)-mean(1))*(x(j)-mean(2))) / (mean(1)*mean(2))
+	end do
+	end do
+	cov(2,1) = cov(1,2)
+end subroutine
 
 
 pure function simulation_mean(pcond) result(mean)
@@ -115,7 +162,10 @@ end function
 pure function R(x) result(f)
 	integer, intent(in) :: x(2)
 	real(dp) :: f
-	f = alpha
+	associate(m => x(1), p => x(2))
+	f = 1._dp * alpha/(p+1)
+	f = 1._dp * alpha
+	end associate
 end function
 
 end program

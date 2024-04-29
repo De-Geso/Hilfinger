@@ -9,7 +9,7 @@ public
 ! Size of burst for [x0, x1]
 integer, parameter, dimension(2) :: burst = [1, 1]
 ! x1 production rate
-real(dp) :: alpha = 2._dp
+real(dp) :: alpha = 1._dp
 ! x2 production rate
 real(dp) :: beta = 1._dp
 ! Decay rates. Can always leave tau_1=1

@@ -8,7 +8,6 @@ use omp_lib
 implicit none
 
 call random_seed(put=seed)
-write(*,*) seed
 ! call random_seed()
 
 ! Randomize variables when testing, if we so choose.
