@@ -8,11 +8,11 @@ public
 ! ======================================================================
 ! Size of burst for [x0, x1]
 integer, parameter, dimension(2) :: burst = [1, 1]
-! x1 production rate
+! mRNA production rate
 real(dp) :: alpha = 1._dp
-! x2 production rate
+! Protein production rate
 real(dp) :: beta = 1._dp
-! Decay rates. Can always leave tau_1=1
+! Decay rates. Can always leave tau_m=1
 real(dp), dimension(2) :: tau = [1._dp, 1._dp]
 ! Abundance update matrix.
 integer, parameter, dimension(2,4) :: abund_update = &

@@ -6,10 +6,20 @@ use utilities
 implicit none
 
 ! Program Hyperparameters ==============================================
+real(dp), parameter :: eps = 1E-16_dp
 ! Number of events before stopping
 integer, parameter :: event_min = 10**6
 ! Maximum abundance. Program will exit if exceeded.
-integer, parameter :: abund_max = 2**4
+integer, parameter :: abund_max = 2**6
+
+! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
+integer, parameter :: nwindow = 2**6
+! Number of points in correlation vector
+integer, parameter :: ncorr = 2**4
+! Maximum time lag for correlation vector
+real(dp), parameter :: maxlag = 1.0_dp
+! Time step for correlation
+! real(dp), parameter :: corr_tstep = 1._dp*lag_max/(ncorr-1)
 
 ! Variables ============================================================
 ! Time
@@ -18,15 +28,17 @@ real(dp) :: t=0._dp, tstep
 real(dp) :: pcond(abund_max, abund_max)=0._dp
 ! Moments
 real(dp) :: mean(2), mean_rate, cov(2,2), thry_mean(2), thry_cov(2,2)
+! Correlation pieces
+real(dp) :: corr(ncorr,4), corr_mean(2,ncorr,4)=0._dp, corr_mean2(ncorr,4)=0._dp, &
+	twindow(nwindow)=0._dp
+integer :: xwindow(2, nwindow)=0
 ! Miscellaneous 
 real(dp) :: propensity(4)
-integer :: i, mp(2)=0, nevents(4)=0, event
-
+integer :: i, j, mp(2)=0, nevents(4)=0, event
 
 
 call random_seed(put=seed)
 ! call random_seed()
-
 
 
 do while (minval(nevents) < event_min)
@@ -42,6 +54,32 @@ do while (minval(nevents) < event_min)
 	! Update time first to record the end times for an abundance, rather than the start times.
 	t = t + tstep
 
+	! Track the abundances and time in a window for correlations.
+	xwindow(:,:nwindow-1) = xwindow(:,2:nwindow)
+	xwindow(:,nwindow) = mp(:)
+	twindow(:nwindow-1) = twindow(2:nwindow)
+	twindow(nwindow) = t
+	
+	if (twindow(1) > eps) then
+		!$omp parallel
+		!$omp sections
+		!$omp section
+		call update_correlation(corr_mean2(:,1), corr_mean(1,:,1), corr_mean(2,:,1), &
+			xwindow(1,:), xwindow(1,:), twindow, tstep)
+		!$omp section
+		call update_correlation(corr_mean2(:,2), corr_mean(1,:,2), corr_mean(2,:,2), &
+			xwindow(2,:), xwindow(1,:), twindow, tstep)
+		!$omp section
+		call update_correlation(corr_mean2(:,3), corr_mean(1,:,3), corr_mean(2,:,3), &
+			xwindow(1,:), xwindow(2,:), twindow, tstep)
+		!$omp section
+		call update_correlation(corr_mean2(:,4), corr_mean(1,:,4), corr_mean(2,:,4), &
+			xwindow(2,:), xwindow(2,:), twindow, tstep)
+		!$omp end sections
+		!$omp end parallel
+	end if
+
+
 	! Add time step to probability matrices
 	pcond(mp(1)+1, mp(2)+1) = pcond(mp(1)+1, mp(2)+1) + tstep
 	
@@ -52,6 +90,19 @@ end do
 
 ! Normalize probabilities.
 pcond = pcond / sum(pcond)
+
+! Normalize correlation means.
+corr_mean2 = corr_mean2 / t
+corr_mean = corr_mean / t
+
+do j = 1, 4
+	do i = 1, ncorr
+		! Combine the variances and means into the correlation (normalized by covariance)
+		corr(i,j) = (corr_mean2(i,j) - corr_mean(1,i,j)*corr_mean(2,1,j)) / &
+				(corr_mean2(1,j)-corr_mean(1,i,j)*corr_mean(2,1,j))
+	end do
+end do
+
 
 call simulation_moments(pcond, mean, mean_rate, cov)
 call theory_moments(pcond, thry_mean, thry_cov)
@@ -68,8 +119,8 @@ subroutine simulation_moments(pcond, mean, mean_rate, cov)
 ! from conditional probability distribution.
 	real(dp), intent(out) :: mean(2), mean_rate, cov(2,2)
 	real(dp), intent(in) :: pcond(abund_max, abund_max)
-	real(dp) :: p(abund_max, 2)
-	integer :: i, j, x(abund_max)
+	real(dp) :: p(abund_max, 2), x(abund_max)
+	integer :: i, j
 	
 	! First moments
 	! Abundance means
@@ -108,14 +159,18 @@ subroutine theory_moments(pcond, mean, cov)
 ! Calculate the theoretical means and covariances.
 	real(dp), intent(in) :: pcond(abund_max, abund_max)
 	real(dp), intent(out) :: mean(2), cov(2,2)
-	real(dp) :: mean_rate, p(abund_max, 2), s(2)
-	integer :: i, j, x(abund_max)
+	real(dp) :: mean_rate, p(abund_max, 2), s(2), x(abund_max)
+	integer :: i, j
 	
 	do i = 1, abund_max
 		x(i) = i-1
 		p(i,1) = sum(pcond(i,:))
 		p(i,2) = sum(pcond(:,i))
 	end do
+	
+	! Step sizes, if we ever want them
+	s(1) = 1._dp*(burst(1)+1) / 2
+	s(2) = 1._dp*(burst(2)+1) / 2
 	
 	! First moment
 	! Mean rate
@@ -127,13 +182,11 @@ subroutine theory_moments(pcond, mean, cov)
 	end do
 	
 	! Mean abundances
-	mean(1) = 1._dp * tau(1)*mean_rate
-	mean(2) = 1._dp * beta*tau(2)*mean(1)
+	mean(1) = 1._dp * burst(1)*tau(1)*mean_rate
+	mean(2) = 1._dp * burst(2)*beta*tau(2)*mean(1)
 	
 	! Second moments
 	cov = 0._dp
-	s(1) = (burst(1)+1) / 2
-	s(2) = (burst(2)+1) / 2
 	
 	do i = 1, abund_max
 	do j = 1, abund_max
@@ -145,6 +198,65 @@ subroutine theory_moments(pcond, mean, cov)
 	cov(1,2) = tau(1)/sum(tau) * cov(1,1) + tau(2)/sum(tau) * cov(1,2)/(mean(2)*mean_rate)
 	cov(2,1) = cov(1,2)
 	cov(2,2) = s(2)/mean(2) + cov(1,2)
+end subroutine
+
+
+subroutine update_correlation(mean2, meanx, meany, y, x, tvec, dt)
+! Iteratively updates correlation variables (covariance and mean) every time step.
+	real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
+	integer, intent(in) :: x(nwindow), y(nwindow)
+	real(dp), intent(in) :: tvec(nwindow), dt
+	real(dp), intent(inout) :: mean2(ncorr), meanx(ncorr), meany(ncorr)
+	real(dp) :: t, ta, tb
+	integer :: i, j, ti, ita, itb
+	
+	! Crash if we aren't carrying enough information around
+	if (tvec(nwindow)-tvec(1) < maxlag .and. tvec(1) /= 0.) then
+		write(*,*) "Error in update_corr: Required lag larger than recorded lag. Increase nwindow."
+		write(*,*) "Recorded time lag: ", tvec(nwindow)-tvec(1)
+		write(*,*) "Required time lag: ", maxlag
+		write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+		call exit()
+	end if
+	
+	! For the leading edge (no lag) we always take exactly one step.
+	! Integrate a rectangle.
+	meanx(1) = meanx(1) + x(nwindow) * dt
+	meany(1) = meany(1) + y(nwindow) * dt
+	mean2(1) = mean2(1) + x(nwindow)*y(nwindow) * dt
+	
+	do i = 2, ncorr
+		! For points with lag, we have to check some things.
+		! Range of time we're interested in.
+		tb = tvec(nwindow) - (i-1.)*corr_tstep
+		ta = tb - dt
+		t = ta
+		! Most recent points smaller than ta and tb
+		ita = maxloc(tvec, dim=1, mask=ta-tvec .gt. 0.)
+		itb = maxloc(tvec, dim=1, mask=tb-tvec .gt. 0.)
+		! Special case where no step occured in time range. Integrate a rectangle
+		if (ita == itb) then
+			mean2(i) = mean2(i) + x(ita+1) * y(nwindow) * dt
+			meanx(i) = meanx(i) + x(ita+1) * dt
+			meany(i) = meany(i) + y(nwindow) * dt
+		else
+			! ta side
+			mean2(i) = mean2(i) + x(ita+1) * y(nwindow) * (tvec(ita+1)-ta)
+			meanx(i) = meanx(i) + x(ita+1) * (tvec(ita+1)-ta)
+			meany(i) = meany(i) + y(nwindow) * (tvec(ita+1)-ta)
+			! tb side
+			mean2(i) = mean2(i) + x(itb+1) * y(nwindow) * (tb-tvec(itb))
+			meanx(i) = meanx(i) + x(itb+1) * (tb-tvec(itb))
+			meany(i) = meany(i) + y(nwindow) * (tb-tvec(itb))
+			
+			! integrate from ta to tb
+			do j = ita+1, itb-1
+				mean2(i) = mean2(i) + x(j+1) * y(nwindow) * (tvec(j+1)-tvec(j))
+				meanx(i) = meanx(i) + x(j+1) * (tvec(j+1)-tvec(j))
+				meany(i) = meany(i) + y(nwindow) * (tvec(j+1)-tvec(j))
+			end do
+		end if	
+	end do
 end subroutine
 
 
@@ -179,30 +291,71 @@ pure function update_propensity(x) result(prop)
 ! Updates propensities depending on the state of the system
 	integer, intent(in) :: x(2)
 	real(dp) :: prop(4)
-	prop(1) = 1._dp * R(x)	! Make x1 (mRNA)
-	prop(2) = 1._dp * x(1)/tau(1)	! Degrade x1 (mRNA)
-	prop(3) = 1._dp * beta*x(1)	! Make x2 (Protein)
-	prop(4) = 1._dp * x(2)/tau(2)	! Degrade x2 (Protein)
+	prop(1) = 1._dp * R(real(x,dp))	! Make mRNA
+	prop(2) = 1._dp * x(1)/tau(1)	! Degrade mRNA
+	prop(3) = 1._dp * beta*x(1)	! Make protein
+	prop(4) = 1._dp * x(2)/tau(2)	! Degrade protein
 end function
 
 
 pure function R(x) result(f)
 ! Production function for mRNA.
-	integer, intent(in) :: x(2)
+	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	
-	f = alpha * 1./(p+1)
-	f = 1._dp * alpha
-	
+	f = alpha * hill(m)
+	! f = 1._dp * alpha
 	end associate
+end function
+
+
+pure function Rp(x) result(df)
+! Derivative of R wrt p
+	real(dp), intent(in) :: x(2)
+	real(dp) :: df
+	associate(m => x(1), p => x(2))
+	df = alpha * (p/k)**n * (n/p) * (-1./(1+(p/k)**n)**2)
+	end associate
+end function
+
+
+pure function Rm(x) result(df)
+! Derivative of R wrt m
+	real(dp), intent(in) :: x(2)
+	real(dp) :: df
+	associate(m => x(1), p => x(2))
+	df = alpha * (m/k)**n * (n/m) * (-1./(1+(m/k)**n)**2)
+	end associate
+end function
+
+
+pure function hill(x) result(f)
+! Hill function. k and n controlled in system parameters.
+	real(dp), intent(in) :: x
+	real(dp) :: f
+	
+	f = 1._dp / (1. + (x/k))**n
+end function
+
+
+pure function correlation_theory(u) result (corr)
+	real(dp) :: corr(4)
+	real(dp), intent(in) :: u
+	! column major
+	
+	! Amm
+	corr(1) = exp(u*(Rm(mean(1))-1./tau(1)))
+	! Amp
+	corr(3) = exp(u*(Rm(mean(1))-1./tau(1)))
 end function
 
 
 subroutine dump()
 ! Output results to console or file.
+real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
+integer :: i, io
 
-! Console output =======================================================
+! Console output
 	write(*,*) "Events: ", event_min
 	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
 	write(*,*) "Mean rate: ", mean_rate
@@ -220,6 +373,23 @@ subroutine dump()
 			percent_difference(thry_cov(2,1), cov(2,1)), &
 			percent_difference(thry_cov(1,2), cov(1,2)), &
 			percent_difference(thry_cov(2,2), cov(2,2))
+
+! Correlations from simulation
+	open(newunit=io, file='mrna_protein_feedback_simulation_correlation.dat', action='write')
+	do i = 1, ncorr
+		t = (i-1)*corr_tstep
+		write(io,*) t, corr(i,:)
+	end do
+	close(io)
+
+! Correlations from theory
+	open(newunit=io, file='mrna_protein_feedback_theory_correlation.dat', action='write')
+	do i = 1, ncorr
+		t = (i-1)*corr_tstep
+		write(io,*) t, correlation_theory(t)
+	end do
+	close(io)
+
 end subroutine
 
 end program
