@@ -9,7 +9,7 @@ implicit none
 ! Number of events before stopping
 integer, parameter :: event_min = 10**6
 ! Maximum abundance. Program will exit if exceeded.
-integer, parameter :: abund_max = 2**6
+integer, parameter :: abund_max = 2**4
 
 ! Variables ============================================================
 ! Time
@@ -17,7 +17,7 @@ real(dp) :: t=0._dp, tstep
 ! Probabilities
 real(dp) :: pcond(abund_max, abund_max)=0._dp
 ! Moments
-real(dp) :: mean(2), mean_rate, cov(2,2)
+real(dp) :: mean(2), mean_rate, cov(2,2), thry_mean(2), thry_cov(2,2)
 ! Miscellaneous 
 real(dp) :: propensity(4)
 integer :: i, mp(2)=0, nevents(4)=0, event
@@ -54,9 +54,8 @@ end do
 pcond = pcond / sum(pcond)
 
 call simulation_moments(pcond, mean, mean_rate, cov)
-write(*,*) mean
-write(*,*) mean_rate
-write(*,*) cov
+call theory_moments(pcond, thry_mean, thry_cov)
+call dump()
 
 
 
@@ -81,7 +80,7 @@ subroutine simulation_moments(pcond, mean, mean_rate, cov)
 	end do
 	mean = matmul(x,p)
 	
-	! Rate means
+	! Rate mean
 	mean_rate = 0._dp
 	do i = 1, abund_max
 	do j = 1, abund_max
@@ -97,7 +96,7 @@ subroutine simulation_moments(pcond, mean, mean_rate, cov)
 	! Off diagonal covariances are symmetric.
 	do i = 1, abund_max
 	do j = 1, abund_max
-		! THESE ARE ETAS. THEY ARE NORMALIZED BY THE MEAN^2
+		! These are etas. They are normalized by the means.
 		cov(1,2) = cov(1,2) + (pcond(i,j)*(x(i)-mean(1))*(x(j)-mean(2))) / (mean(1)*mean(2))
 	end do
 	end do
@@ -105,20 +104,48 @@ subroutine simulation_moments(pcond, mean, mean_rate, cov)
 end subroutine
 
 
-pure function simulation_mean(pcond) result(mean)
-! Calculate mean abundances from joint(conditional) probability dist.
-	real(dp) :: mean(2)
+subroutine theory_moments(pcond, mean, cov)
+! Calculate the theoretical means and covariances.
 	real(dp), intent(in) :: pcond(abund_max, abund_max)
-	real(dp) :: p(abund_max, 2)
-	integer :: x(abund_max), i
+	real(dp), intent(out) :: mean(2), cov(2,2)
+	real(dp) :: mean_rate, p(abund_max, 2), s(2)
+	integer :: i, j, x(abund_max)
 	
 	do i = 1, abund_max
 		x(i) = i-1
 		p(i,1) = sum(pcond(i,:))
 		p(i,2) = sum(pcond(:,i))
 	end do
-	mean = matmul(x,p)
-end function
+	
+	! First moment
+	! Mean rate
+	mean_rate = 0._dp
+	do i = 1, abund_max
+	do j = 1, abund_max
+		mean_rate = mean_rate + pcond(i,j)*R([x(i),x(j)])
+	end do
+	end do
+	
+	! Mean abundances
+	mean(1) = 1._dp * tau(1)*mean_rate
+	mean(2) = 1._dp * beta*tau(2)*mean(1)
+	
+	! Second moments
+	cov = 0._dp
+	s(1) = (burst(1)+1) / 2
+	s(2) = (burst(2)+1) / 2
+	
+	do i = 1, abund_max
+	do j = 1, abund_max
+		cov(1,1) = cov(1,1) + (pcond(i,j) * (x(i) - mean(1)) * (R([x(i), x(j)]) - mean_rate))
+		cov(1,2) = cov(1,2) + (pcond(i,j) * (x(j) - mean(2)) * (R([x(i), x(j)]) - mean_rate))
+	end do
+	end do
+	cov(1,1) = cov(1,1)/(mean(1)*mean_rate) + s(1)/mean(1)
+	cov(1,2) = tau(1)/sum(tau) * cov(1,1) + tau(2)/sum(tau) * cov(1,2)/(mean(2)*mean_rate)
+	cov(2,1) = cov(1,2)
+	cov(2,2) = s(2)/mean(2) + cov(1,2)
+end subroutine
 
 
 subroutine gillespie_iter(abund, tstep, event, propensity)
@@ -160,12 +187,39 @@ end function
 
 
 pure function R(x) result(f)
+! Production function for mRNA.
 	integer, intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	f = 1._dp * alpha/(p+1)
+	
+	f = alpha * 1./(p+1)
 	f = 1._dp * alpha
+	
 	end associate
 end function
+
+
+subroutine dump()
+! Output results to console or file.
+
+! Console output =======================================================
+	write(*,*) "Events: ", event_min
+	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+	write(*,*) "Mean rate: ", mean_rate
+	write(*,*) "Theoretical mean: ", thry_mean
+	write(*,*) "Simulation mean: ", mean
+	write(*,*) "Percent difference: ", &
+			percent_difference(thry_mean(1), mean(1)), &
+			percent_difference(thry_mean(2), mean(2))
+	write(*,*) "Theoretical covariance matrix: "
+	write(*,*) thry_cov
+	write(*,*) "Simulation covariance matrix (eta): "
+	write(*,*) cov
+	write(*,*) "Percent difference: "
+	write(*,*) percent_difference(thry_cov(1,1), cov(1,1)), &
+			percent_difference(thry_cov(2,1), cov(2,1)), &
+			percent_difference(thry_cov(1,2), cov(1,2)), &
+			percent_difference(thry_cov(2,2), cov(2,2))
+end subroutine
 
 end program
