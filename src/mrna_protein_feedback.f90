@@ -338,15 +338,25 @@ pure function hill(x) result(f)
 end function
 
 
-pure function correlation_theory(u) result (corr)
+pure function theory_correlation(u, mean, cov) result (corr)
 	real(dp) :: corr(4)
-	real(dp), intent(in) :: u
+	real(dp), intent(in) :: u, mean(2), cov(2,2)
 	! column major
 	
 	! Amm
-	corr(1) = exp(u*(Rm(mean(1))-1./tau(1)))
+	corr(1) = exp(u*(Rm(mean)-1./tau(1)))
+	! Apm
+	corr(2) = exp(-u/tau(2)) + &
+		(exp(u * (Rm(mean) - 1./tau(1))) - exp(-u/tau(2))) * beta * tau(1) * tau(2) / &
+		(tau(1) + (-1. + Rm(mean)*tau(1))*tau(2)) * &
+		cov(1,1) * mean(1) / (cov(1,2) * mean(2))
 	! Amp
-	corr(3) = exp(u*(Rm(mean(1))-1./tau(1)))
+	corr(3) = exp(u*(Rm(mean)-1./tau(1)))
+	! App
+	corr(4) = exp(-u/tau(2)) + &
+		(exp(u * (Rm(mean) - 1./tau(1))) - exp(-u/tau(2))) * beta * tau(1) * tau(2) / &
+		(tau(1) + (-1. + Rm(mean)*tau(1))*tau(2)) * &
+		cov(1,2) * mean(2) / (cov(2,2) * mean(1))
 end function
 
 
@@ -386,7 +396,7 @@ integer :: i, io
 	open(newunit=io, file='mrna_protein_feedback_theory_correlation.dat', action='write')
 	do i = 1, ncorr
 		t = (i-1)*corr_tstep
-		write(io,*) t, correlation_theory(t)
+		write(io,*) t, theory_correlation(t, thry_mean, thry_cov)
 	end do
 	close(io)
 
