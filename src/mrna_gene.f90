@@ -350,7 +350,7 @@ subroutine dump()
 	! Correlations from simulations
 	open(newunit=io, file='mRNA_protein_correlation_sim.dat', action='write')
 	call write_metadata(io, &
-		"mRNA-protein system simulation correlation, and derivative of A_pp", &
+		"mRNA-protein system simulation normalized correlation, and derivative of A_pp", &
 		"Time, A_mm, A_pm, A_mp, A_pp, dA_pp")
 	do i = 1, corr_n
 		t = (i-1)*corr_tstep
@@ -361,11 +361,11 @@ subroutine dump()
 	! Correlations and their derivative from theory
 	open(1, file='mRNA_protein_correlation_thry.dat', action='write')
 	call write_metadata(1, &
-		"mRNA-protein system theory correlation.", &
+		"mRNA-protein system theory normalized correlation.", &
 		"Time, A_mm, A_pm, A_mp, A_pp")
 	open(2, file='mRNA_protein_dcorrelation_thry.dat', action='write')
 	call write_metadata(2, &
-		"mRNA-protein system simulation correlation derivatives.", &
+		"mRNA-protein system simulation normalized correlation derivatives.", &
 		"Time, dA_mm, dA_pm, dA_mp, dA_pp")
 	do i = 1, nt
 		t = (i-1)*(tmax/(nt-1))
