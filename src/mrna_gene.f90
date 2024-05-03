@@ -320,6 +320,7 @@ end function
 
 
 subroutine dump()
+! Output everything we want.
 	real(dp) :: t, tmax, corr_thry(4), dcorr_thry(4), chi2
 	integer :: io, nt
 	
@@ -347,7 +348,10 @@ subroutine dump()
 ! End console output ===================================================
 
 	! Correlations from simulations
-	open(newunit=io, file='corr_sim.dat', action='write')
+	open(newunit=io, file='mRNA_protein_correlation_sim.dat', action='write')
+	call write_metadata(io, &
+		"mRNA-protein system simulation correlation, and derivative of A_pp", &
+		"Time, A_mm, A_pm, A_mp, A_pp, dA_pp")
 	do i = 1, corr_n
 		t = (i-1)*corr_tstep
 		write(io,*) t, corr(i,:), dcorr(i)
@@ -355,8 +359,14 @@ subroutine dump()
 	close(io)
 	
 	! Correlations and their derivative from theory
-	open(1, file='corr_thry.dat', action='write')
-	open(2, file='dcorr_thry.dat', action='write')
+	open(1, file='mRNA_protein_correlation_thry.dat', action='write')
+	call write_metadata(1, &
+		"mRNA-protein system theory correlation.", &
+		"Time, A_mm, A_pm, A_mp, A_pp")
+	open(2, file='mRNA_protein_dcorrelation_thry.dat', action='write')
+	call write_metadata(2, &
+		"mRNA-protein system simulation correlation derivatives.", &
+		"Time, dA_mm, dA_pm, dA_mp, dA_pp")
 	do i = 1, nt
 		t = (i-1)*(tmax/(nt-1))
 		write(1,*) t, correlation_theory(t)
@@ -397,6 +407,25 @@ subroutine dump()
 !			cov_thry(2,2)*dcorr_thry(4), &
 !			cov_thry(2,2)*corr_thry(4)
 !	close(io)
+end subroutine
+
+
+subroutine write_metadata(io, desc, headers)
+	integer, intent(in) :: io
+	character(len=*), intent(in) :: desc, headers
+	write(io,*) "# Metadata"
+	write(io,*) "# Program: mrna_gene.f90"
+	write(io,*) "# Description: ", desc
+	write(io,*) "# Creation date: ", fdate()
+	write(io,*) "# System Parameters: "
+	write(io,*) "# alpha= ", alpha
+	write(io,*) "# beta= ", beta
+	write(io,*) "# tau_p= ", tau(2)
+	write(io,*) "# <m>= ", mean(1)
+	write(io,*) "# <p>= ", mean(2)
+	write(io,*) ""
+	write(io,*) "# Data: "
+	write(io,*) "# ", headers
 end subroutine
 
 
