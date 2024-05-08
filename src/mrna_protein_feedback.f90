@@ -27,10 +27,11 @@ real(dp) :: t=0._dp, tstep
 ! Probabilities
 real(dp) :: pcond(abund_max, abund_max)=0._dp
 ! Moments
-real(dp) :: mean(2), mean_rate, cov(2,2), thry_mean(2), thry_cov(2,2)
+real(dp) :: mean(2), meanR, cov(2,2), thry_mean(2), thry_cov(2,2)
 ! Correlation pieces
 real(dp) :: corr(ncorr,4), corr_mean(2,ncorr,4)=0._dp, corr_mean2(ncorr,4)=0._dp, &
 	twindow(nwindow)=0._dp
+real(dp) :: dcorr(ncorr)
 integer :: xwindow(2, nwindow)=0
 ! Miscellaneous 
 real(dp) :: propensity(4)
@@ -79,7 +80,6 @@ do while (minval(nevents) < event_min)
 		!$omp end parallel
 	end if
 
-
 	! Add time step to probability matrices
 	pcond(mp(1)+1, mp(2)+1) = pcond(mp(1)+1, mp(2)+1) + tstep
 	
@@ -97,27 +97,26 @@ corr_mean = corr_mean / t
 
 do j = 1, 4
 	do i = 1, ncorr
-		! Combine the variances and means into the correlation (normalized by covariance)
-		corr(i,j) = (corr_mean2(i,j) - corr_mean(1,i,j)*corr_mean(2,1,j)) / &
-				(corr_mean2(1,j)-corr_mean(1,i,j)*corr_mean(2,1,j))
+		! Combine the variances and means into the correlation (no longer normalized)
+		corr(i,j) = (corr_mean2(i,j) - corr_mean(1,i,j)*corr_mean(2,1,j)) 
+!				/ (corr_mean2(1,j)-corr_mean(1,i,j)*corr_mean(2,1,j))
 	end do
 end do
+dcorr = -1._dp/tau(2) * (corr(:,4) - corr(:,3)*cov(1,2)/cov(2,2))
 
-
-call simulation_moments(pcond, mean, mean_rate, cov)
+call simulation_moments(pcond, mean, meanR, cov)
 call theory_moments(pcond, thry_mean, thry_cov)
+
 call dump()
-
-
 
 contains
 
 
 
-subroutine simulation_moments(pcond, mean, mean_rate, cov)
+subroutine simulation_moments(pcond, mean, meanR, cov)
 ! Calculate mean abundances and covariance matrix (eta--normalized)
 ! from conditional probability distribution.
-	real(dp), intent(out) :: mean(2), mean_rate, cov(2,2)
+	real(dp), intent(out) :: mean(2), meanR, cov(2,2)
 	real(dp), intent(in) :: pcond(abund_max, abund_max)
 	real(dp) :: p(abund_max, 2), x(abund_max)
 	integer :: i, j
@@ -132,10 +131,10 @@ subroutine simulation_moments(pcond, mean, mean_rate, cov)
 	mean = matmul(x,p)
 	
 	! Rate mean
-	mean_rate = 0._dp
+	meanR = 0._dp
 	do i = 1, abund_max
 	do j = 1, abund_max
-		mean_rate = mean_rate + pcond(i,j)*R([x(i),x(j)])
+		meanR = meanR + pcond(i,j)*R([x(i),x(j)])
 	end do
 	end do
 	
@@ -159,7 +158,7 @@ subroutine theory_moments(pcond, mean, cov)
 ! Calculate the theoretical means and covariances.
 	real(dp), intent(in) :: pcond(abund_max, abund_max)
 	real(dp), intent(out) :: mean(2), cov(2,2)
-	real(dp) :: mean_rate, p(abund_max, 2), s(2), x(abund_max)
+	real(dp) :: meanR, p(abund_max, 2), s(2), x(abund_max)
 	integer :: i, j
 	
 	do i = 1, abund_max
@@ -174,15 +173,15 @@ subroutine theory_moments(pcond, mean, cov)
 	
 	! First moment
 	! Mean rate
-	mean_rate = 0._dp
+	meanR = 0._dp
 	do i = 1, abund_max
 	do j = 1, abund_max
-		mean_rate = mean_rate + pcond(i,j)*R([x(i),x(j)])
+		meanR = meanR + pcond(i,j)*R([x(i),x(j)])
 	end do
 	end do
 	
 	! Mean abundances
-	mean(1) = 1._dp * burst(1)*tau(1)*mean_rate
+	mean(1) = 1._dp * burst(1)*tau(1)*meanR
 	mean(2) = 1._dp * burst(2)*beta*tau(2)*mean(1)
 	
 	! Second moments
@@ -190,12 +189,12 @@ subroutine theory_moments(pcond, mean, cov)
 	
 	do i = 1, abund_max
 	do j = 1, abund_max
-		cov(1,1) = cov(1,1) + (pcond(i,j) * (x(i) - mean(1)) * (R([x(i), x(j)]) - mean_rate))
-		cov(1,2) = cov(1,2) + (pcond(i,j) * (x(j) - mean(2)) * (R([x(i), x(j)]) - mean_rate))
+		cov(1,1) = cov(1,1) + (pcond(i,j) * (x(i) - mean(1)) * (R([x(i), x(j)]) - meanR))
+		cov(1,2) = cov(1,2) + (pcond(i,j) * (x(j) - mean(2)) * (R([x(i), x(j)]) - meanR))
 	end do
 	end do
-	cov(1,1) = cov(1,1)/(mean(1)*mean_rate) + s(1)/mean(1)
-	cov(1,2) = tau(1)/sum(tau) * cov(1,1) + tau(2)/sum(tau) * cov(1,2)/(mean(2)*mean_rate)
+	cov(1,1) = cov(1,1)/(mean(1)*meanR) + s(1)/mean(1)
+	cov(1,2) = tau(1)/sum(tau) * cov(1,1) + tau(2)/sum(tau) * cov(1,2)/(mean(2)*meanR)
 	cov(2,1) = cov(1,2)
 	cov(2,2) = s(2)/mean(2) + cov(1,2)
 end subroutine
@@ -365,7 +364,7 @@ subroutine dump()
 	! Console output
 	write(*,*) "Events: ", event_min
 	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
-	write(*,*) "Mean rate: ", mean_rate
+	write(*,*) "Mean rate: ", meanR
 	write(*,*) "Theoretical mean: ", thry_mean
 	write(*,*) "Simulation mean: ", mean
 	write(*,*) "Percent difference: ", &
@@ -384,8 +383,8 @@ subroutine dump()
 	! Correlations from simulation
 	open(newunit=io, file=fname, action='write')
 	call write_metadata_sim(io, &
-		"mRNA-protein system simulation normalized correlation", &
-		"Time, A_mm, A_pm, A_mp, A_pp")
+		"mRNA-protein system simulation unnormalized correlations and derivative of App from correlation relations.", &
+		"Time, Amm, Apm, Amp, App, dApp")
 
 	do i = 1, ncorr
 		t = (i-1)*corr_tstep
@@ -418,6 +417,8 @@ subroutine write_metadata_sim(io, desc, headers)
 	write(io,*) "# tau_p: ", tau(2)
 	write(io,*) "# mavg: ", mean(1)
 	write(io,*) "# pavg: ", mean(2)
+	write(io,*) "# pavg: ", mean(2)
+	write(io,*) "# Ravg: ", meanR
 	write(io,*) "# etamm: ", cov(1,1)
 	write(io,*) "# etamp: ", cov(1,2)
 	write(io,*) "# etapm: ", cov(2,1)
