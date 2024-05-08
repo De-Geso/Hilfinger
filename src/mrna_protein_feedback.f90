@@ -19,7 +19,7 @@ integer, parameter :: ncorr = 2**4
 ! Maximum time lag for correlation vector
 real(dp), parameter :: maxlag = 1.0_dp
 ! Time step for correlation
-! real(dp), parameter :: corr_tstep = 1._dp*lag_max/(ncorr-1)
+real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 
 ! Variables ============================================================
 ! Time
@@ -203,7 +203,7 @@ end subroutine
 
 subroutine update_correlation(mean2, meanx, meany, y, x, tvec, dt)
 ! Iteratively updates correlation variables (covariance and mean) every time step.
-	real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
+!	real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 	integer, intent(in) :: x(nwindow), y(nwindow)
 	real(dp), intent(in) :: tvec(nwindow), dt
 	real(dp), intent(inout) :: mean2(ncorr), meanx(ncorr), meany(ncorr)
@@ -303,28 +303,8 @@ pure function R(x) result(f)
 	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	f = alpha * hill(m)
+	f = alpha * hill(p)
 	! f = 1._dp * alpha
-	end associate
-end function
-
-
-pure function Rp(x) result(df)
-! Derivative of R wrt p
-	real(dp), intent(in) :: x(2)
-	real(dp) :: df
-	associate(m => x(1), p => x(2))
-	df = alpha * (p/k)**n * (n/p) * (-1./(1+(p/k)**n)**2)
-	end associate
-end function
-
-
-pure function Rm(x) result(df)
-! Derivative of R wrt m
-	real(dp), intent(in) :: x(2)
-	real(dp) :: df
-	associate(m => x(1), p => x(2))
-	df = alpha * (m/k)**n * (n/m) * (-1./(1+(m/k)**n)**2)
 	end associate
 end function
 
@@ -334,38 +314,55 @@ pure function hill(x) result(f)
 	real(dp), intent(in) :: x
 	real(dp) :: f
 	
-	f = 1._dp / (1. + (x/k))**n
+	f = 1._dp / (1. + (x/k)**n)
 end function
 
 
-pure function theory_correlation(u, mean, cov) result (corr)
-	real(dp) :: corr(4)
-	real(dp), intent(in) :: u, mean(2), cov(2,2)
-	! column major
+!pure function theory_correlation(u, mean, cov) result (corr)
+!	real(dp) :: corr(4)
+!	real(dp), intent(in) :: u, mean(2), cov(2,2)
+!	! column major
 	
-	! Amm
-	corr(1) = exp(u*(Rm(mean)-1./tau(1)))
-	! Apm
-	corr(2) = exp(-u/tau(2)) + &
-		(exp(u * (Rm(mean) - 1./tau(1))) - exp(-u/tau(2))) * beta * tau(1) * tau(2) / &
-		(tau(1) + (-1. + Rm(mean)*tau(1))*tau(2)) * &
-		cov(1,1) * mean(1) / (cov(1,2) * mean(2))
-	! Amp
-	corr(3) = exp(u*(Rm(mean)-1./tau(1)))
-	! App
-	corr(4) = exp(-u/tau(2)) + &
-		(exp(u * (Rm(mean) - 1./tau(1))) - exp(-u/tau(2))) * beta * tau(1) * tau(2) / &
-		(tau(1) + (-1. + Rm(mean)*tau(1))*tau(2)) * &
-		cov(1,2) * mean(2) / (cov(2,2) * mean(1))
-end function
+!	! Amm
+!	corr(1) = exp(u*(Rm(mean)-1./tau(1)))
+!	! Apm
+!	corr(2) = exp(-u/tau(2)) + &
+!		(exp(u * (Rm(mean) - 1./tau(1))) - exp(-u/tau(2))) * beta * tau(1) * tau(2) / &
+!		(tau(1) + (-1. + Rm(mean)*tau(1))*tau(2)) * &
+!		cov(1,1) * mean(1) / (cov(1,2) * mean(2))
+!	! Amp
+!	corr(3) = exp(u*(Rm(mean)-1./tau(1)))
+!	! App
+!	corr(4) = exp(-u/tau(2)) + &
+!		(exp(u * (Rm(mean) - 1./tau(1))) - exp(-u/tau(2))) * beta * tau(1) * tau(2) / &
+!		(tau(1) + (-1. + Rm(mean)*tau(1))*tau(2)) * &
+!		cov(1,2) * mean(2) / (cov(2,2) * mean(1))
+!end function
 
 
 subroutine dump()
-! Output results to console or file.
-real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
-integer :: i, io
+! Output results.
+!	real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
+	integer :: i, io, fnum
+	character(len=*), parameter :: path='data/'
+	character(len=:), allocatable :: prefix, suffix
+	character(len=256) :: fname
+	logical :: ex
+	
+	! Check file existances, and relabel with correct numbering
+	prefix = "mrna_protein_feedback_correlation_sim_"
+	suffix = ".dat"
+	fnum = 0
+	! Make filename. Check if it already exists. Increase number on filename.
+	write (fname, '(a, a, i0, a)') path, prefix, fnum, suffix
+	inquire(file=fname, exist=ex)
+	do while (ex)
+		fnum = fnum + 1
+		write (fname, '(a, a, i0, a)') path, prefix, fnum, suffix
+		inquire(file=fname, exist=ex)
+	end do
 
-! Console output
+	! Console output
 	write(*,*) "Events: ", event_min
 	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
 	write(*,*) "Mean rate: ", mean_rate
@@ -384,22 +381,50 @@ integer :: i, io
 			percent_difference(thry_cov(1,2), cov(1,2)), &
 			percent_difference(thry_cov(2,2), cov(2,2))
 
-! Correlations from simulation
-	open(newunit=io, file='mrna_protein_feedback_simulation_correlation.dat', action='write')
+	! Correlations from simulation
+	open(newunit=io, file=fname, action='write')
+	call write_metadata_sim(io, &
+		"mRNA-protein system simulation normalized correlation", &
+		"Time, A_mm, A_pm, A_mp, A_pp")
+
 	do i = 1, ncorr
 		t = (i-1)*corr_tstep
 		write(io,*) t, corr(i,:)
 	end do
 	close(io)
 
-! Correlations from theory
-	open(newunit=io, file='mrna_protein_feedback_theory_correlation.dat', action='write')
-	do i = 1, ncorr
-		t = (i-1)*corr_tstep
-		write(io,*) t, theory_correlation(t, thry_mean, thry_cov)
-	end do
-	close(io)
+!	! Correlations from theory
+!	open(newunit=io, file='mrna_protein_feedback_theory_correlation.dat', action='write')
+!	do i = 1, ncorr
+!		t = (i-1)*corr_tstep
+!		write(io,*) t, theory_correlation(t, thry_mean, thry_cov)
+!	end do
+!	close(io)
+end subroutine
 
+
+subroutine write_metadata_sim(io, desc, headers)
+! Write metadata to file
+	integer, intent(in) :: io
+	character(len=*), intent(in) :: desc, headers
+	write(io,*) "# Metadata"
+	write(io,*) "# Program: mrna_protein_feedback.f90"
+	write(io,*) "# Description: ", desc
+	write(io,*) "# Creation date: ", fdate()
+	write(io,*) ""
+	write(io,*) "# Parameter Metadata"
+	write(io,*) "# alpha: ", alpha
+	write(io,*) "# beta: ", beta
+	write(io,*) "# tau_p: ", tau(2)
+	write(io,*) "# mavg: ", mean(1)
+	write(io,*) "# pavg: ", mean(2)
+	write(io,*) "# etamm: ", cov(1,1)
+	write(io,*) "# etamp: ", cov(1,2)
+	write(io,*) "# etapm: ", cov(2,1)
+	write(io,*) "# etapp: ", cov(2,2)
+	write(io,*) ""
+	write(io,*) "# Data"
+	write(io,*) "# ", headers
 end subroutine
 
 end program

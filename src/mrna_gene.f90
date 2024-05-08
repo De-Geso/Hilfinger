@@ -7,16 +7,16 @@ use utilities
 use omp_lib
 implicit none
 
-call random_seed(put=seed)
-! call random_seed()
+! call random_seed(put=seed)
+call random_seed()
 
 ! Randomize variables when testing, if we so choose.
-! call random_uniform(roll, -1._dp, 1._dp)
-! alpha = 10._dp**roll
-! call random_uniform(roll, -1._dp, 1._dp)
-! beta = 10._dp**roll
-! call random_uniform(roll, -1._dp, 1._dp)
-! tau(2) = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+alpha = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+beta = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+tau(2) = 10._dp**roll
 
 x(1) = 0
 x(2) = 0
@@ -349,7 +349,7 @@ subroutine dump()
 
 	! Correlations from simulations
 	open(newunit=io, file='mRNA_protein_correlation_sim.dat', action='write')
-	call write_metadata(io, &
+	call write_metadata_sim(io, &
 		"mRNA-protein system simulation normalized correlation, and derivative of A_pp", &
 		"Time, A_mm, A_pm, A_mp, A_pp, dA_pp")
 	do i = 1, corr_n
@@ -360,11 +360,11 @@ subroutine dump()
 	
 	! Correlations and their derivative from theory
 	open(1, file='mRNA_protein_correlation_thry.dat', action='write')
-	call write_metadata(1, &
+	call write_metadata_thry(1, &
 		"mRNA-protein system theory normalized correlation.", &
 		"Time, A_mm, A_pm, A_mp, A_pp")
 	open(2, file='mRNA_protein_dcorrelation_thry.dat', action='write')
-	call write_metadata(2, &
+	call write_metadata_thry(2, &
 		"mRNA-protein system simulation normalized correlation derivatives.", &
 		"Time, dA_mm, dA_pm, dA_mp, dA_pp")
 	do i = 1, nt
@@ -395,8 +395,7 @@ subroutine dump()
 			percent_difference(cov_thry(1,2), cov(1,2)), &
 			percent_difference(cov_thry(2,2), cov(2,2))
 	close(io)
-	
-	
+		
 	! Jerry rigged testing of derivative and step size
 !	open(newunit=io, file='step_size.dat', position='append', action='write')
 !	dcorr_thry = dcorrelation_theory(0._dp)
@@ -410,21 +409,51 @@ subroutine dump()
 end subroutine
 
 
-subroutine write_metadata(io, desc, headers)
+subroutine write_metadata_sim(io, desc, headers)
 	integer, intent(in) :: io
 	character(len=*), intent(in) :: desc, headers
 	write(io,*) "# Metadata"
 	write(io,*) "# Program: mrna_gene.f90"
 	write(io,*) "# Description: ", desc
 	write(io,*) "# Creation date: ", fdate()
-	write(io,*) "# System Parameters: "
-	write(io,*) "# alpha= ", alpha
-	write(io,*) "# beta= ", beta
-	write(io,*) "# tau_p= ", tau(2)
-	write(io,*) "# <m>= ", mean(1)
-	write(io,*) "# <p>= ", mean(2)
 	write(io,*) ""
-	write(io,*) "# Data: "
+	write(io,*) "# Parameter Metadata"
+	write(io,*) "# alpha: ", alpha
+	write(io,*) "# beta: ", beta
+	write(io,*) "# tau_p: ", tau(2)
+	write(io,*) "# mavg: ", mean(1)
+	write(io,*) "# pavg: ", mean(2)
+	write(io,*) "# etamm: ", cov(1,1)
+	write(io,*) "# etamp: ", cov(1,2)
+	write(io,*) "# etapm: ", cov(2,1)
+	write(io,*) "# etapp: ", cov(2,2)
+	write(io,*) ""
+	write(io,*) "# Data"
+	write(io,*) "# ", headers
+end subroutine
+
+
+subroutine write_metadata_thry(io, desc, headers)
+	integer, intent(in) :: io
+	character(len=*), intent(in) :: desc, headers
+	real(dp) :: mean(2)
+	write(io,*) "# Metadata"
+	write(io,*) "# Program: mrna_gene.f90"
+	write(io,*) "# Description: ", desc
+	write(io,*) "# Creation date: ", fdate()
+	write(io,*) ""
+	write(io,*) "# Parameter Metadata"
+	write(io,*) "# alpha: ", alpha
+	write(io,*) "# beta: ", beta
+	write(io,*) "# tau_p: ", tau(2)
+	write(io,*) "# mavg: ", mean_thry(1)
+	write(io,*) "# pavg: ", mean_thry(2)
+	write(io,*) "# etamm: ", cov_thry(1,1)
+	write(io,*) "# etamp: ", cov_thry(1,2)
+	write(io,*) "# etapm: ", cov_thry(2,1)
+	write(io,*) "# etapp: ", cov_thry(2,2)
+	write(io,*) ""
+	write(io,*) "# Data"
 	write(io,*) "# ", headers
 end subroutine
 
