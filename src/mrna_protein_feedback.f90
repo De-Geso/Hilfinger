@@ -303,7 +303,7 @@ pure function R(x) result(f)
 	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	f = alpha * hill(p)
+	f = 1._dp * alpha * hill(p)
 	! f = 1._dp * alpha
 	end associate
 end function
