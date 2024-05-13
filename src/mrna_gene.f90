@@ -11,12 +11,12 @@ implicit none
 call random_seed()
 
 ! Randomize variables when testing, if we so choose.
-call random_uniform(roll, -1._dp, 1._dp)
-alpha = 10._dp**roll
-call random_uniform(roll, -1._dp, 1._dp)
-beta = 10._dp**roll
-call random_uniform(roll, -1._dp, 1._dp)
-tau(2) = 10._dp**roll
+!call random_uniform(roll, -1._dp, 1._dp)
+!alpha = 10._dp**roll
+!call random_uniform(roll, -1._dp, 1._dp)
+!beta = 10._dp**roll
+!call random_uniform(roll, -1._dp, 1._dp)
+!tau(2) = 10._dp**roll
 
 x(1) = 0
 x(2) = 0

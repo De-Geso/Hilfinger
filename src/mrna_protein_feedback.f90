@@ -13,11 +13,11 @@ integer, parameter :: event_min = 10**6
 integer, parameter :: abund_max = 2**6
 
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
-integer, parameter :: nwindow = 2**6
+integer, parameter :: nwindow = 2**7
 ! Number of points in correlation vector
 integer, parameter :: ncorr = 2**4
 ! Maximum time lag for correlation vector
-real(dp), parameter :: maxlag = 1.0_dp
+real(dp), parameter :: maxlag = 3.0_dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 
@@ -91,6 +91,10 @@ end do
 ! Normalize probabilities.
 pcond = pcond / sum(pcond)
 
+! Get moments
+call simulation_moments(pcond, mean, meanR, cov)
+call theory_moments(pcond, thry_mean, thry_cov)
+
 ! Normalize correlation means.
 corr_mean2 = corr_mean2 / t
 corr_mean = corr_mean / t
@@ -98,14 +102,11 @@ corr_mean = corr_mean / t
 do j = 1, 4
 	do i = 1, ncorr
 		! Combine the variances and means into the correlation (no longer normalized)
-		corr(i,j) = (corr_mean2(i,j) - corr_mean(1,i,j)*corr_mean(2,1,j)) 
-!				/ (corr_mean2(1,j)-corr_mean(1,i,j)*corr_mean(2,1,j))
+		corr(i,j) = (corr_mean2(i,j) - corr_mean(1,i,j)*corr_mean(2,1,j)) &
+				/ (corr_mean2(1,j)-corr_mean(1,i,j)*corr_mean(2,1,j))
 	end do
 end do
-dcorr = -1._dp/tau(2) * (corr(:,4) - corr(:,3)*cov(1,2)/cov(2,2))
-
-call simulation_moments(pcond, mean, meanR, cov)
-call theory_moments(pcond, thry_mean, thry_cov)
+dcorr = -1._dp/tau(2) * (corr(:,4) - corr(:,3)*cov(2,1)/cov(2,2))
 
 call dump()
 
@@ -317,31 +318,9 @@ pure function hill(x) result(f)
 end function
 
 
-!pure function theory_correlation(u, mean, cov) result (corr)
-!	real(dp) :: corr(4)
-!	real(dp), intent(in) :: u, mean(2), cov(2,2)
-!	! column major
-	
-!	! Amm
-!	corr(1) = exp(u*(Rm(mean)-1./tau(1)))
-!	! Apm
-!	corr(2) = exp(-u/tau(2)) + &
-!		(exp(u * (Rm(mean) - 1./tau(1))) - exp(-u/tau(2))) * beta * tau(1) * tau(2) / &
-!		(tau(1) + (-1. + Rm(mean)*tau(1))*tau(2)) * &
-!		cov(1,1) * mean(1) / (cov(1,2) * mean(2))
-!	! Amp
-!	corr(3) = exp(u*(Rm(mean)-1./tau(1)))
-!	! App
-!	corr(4) = exp(-u/tau(2)) + &
-!		(exp(u * (Rm(mean) - 1./tau(1))) - exp(-u/tau(2))) * beta * tau(1) * tau(2) / &
-!		(tau(1) + (-1. + Rm(mean)*tau(1))*tau(2)) * &
-!		cov(1,2) * mean(2) / (cov(2,2) * mean(1))
-!end function
-
-
 subroutine dump()
 ! Output results.
-!	real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
+	real(dp) t, x
 	integer :: i, io, fnum
 	character(len=*), parameter :: path='data/'
 	character(len=:), allocatable :: prefix, suffix
@@ -349,7 +328,7 @@ subroutine dump()
 	logical :: ex
 	
 	! Check file existances, and relabel with correct numbering
-	prefix = "mrna_protein_feedback_correlation_sim_"
+	prefix = "mRNA_protein_feedback_correlation_sim_"
 	suffix = ".dat"
 	fnum = 0
 	! Make filename. Check if it already exists. Increase number on filename.
@@ -360,6 +339,7 @@ subroutine dump()
 		write (fname, '(a, a, i0, a)') path, prefix, fnum, suffix
 		inquire(file=fname, exist=ex)
 	end do
+	write(*,*) "File output at: ", fname
 
 	! Console output
 	write(*,*) "Events: ", event_min
@@ -388,10 +368,10 @@ subroutine dump()
 
 	do i = 1, ncorr
 		t = (i-1)*corr_tstep
-		write(io,*) t, corr(i,:)
+		write(io,*) t, corr(i,:), dcorr(i)
 	end do
 	close(io)
-
+	
 !	! Correlations from theory
 !	open(newunit=io, file='mrna_protein_feedback_theory_correlation.dat', action='write')
 !	do i = 1, ncorr
@@ -412,11 +392,13 @@ subroutine write_metadata_sim(io, desc, headers)
 	write(io,*) "# Creation date: ", fdate()
 	write(io,*) ""
 	write(io,*) "# Parameter Metadata"
+	write(io,*) "# events: ", event_min
 	write(io,*) "# alpha: ", alpha
 	write(io,*) "# beta: ", beta
 	write(io,*) "# tau_p: ", tau(2)
+	write(io,*) "# k: ", k
+	write(io,*) "# n: ", n
 	write(io,*) "# mavg: ", mean(1)
-	write(io,*) "# pavg: ", mean(2)
 	write(io,*) "# pavg: ", mean(2)
 	write(io,*) "# Ravg: ", meanR
 	write(io,*) "# etamm: ", cov(1,1)

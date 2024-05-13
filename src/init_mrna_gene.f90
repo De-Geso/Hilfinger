@@ -18,7 +18,7 @@ integer, parameter :: ntail = 2**7
 ! Length of correlation vector
 integer, parameter :: corr_n = 2**4
 ! Maximum time lag for correlation
-real(dp), parameter :: lag_max = 1.0_dp
+real(dp), parameter :: lag_max = 3.0_dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*lag_max/(corr_n-1)
 

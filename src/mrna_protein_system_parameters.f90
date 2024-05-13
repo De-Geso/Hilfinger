@@ -21,7 +21,7 @@ integer, parameter, dimension(2,4) :: abund_update = &
 			0, burst(2), &
 			0, -1/), shape(abund_update))
 ! Hill function parameters
-real(dp) :: k = 1._dp
+real(dp) :: k = 0.1_dp
 real(dp) :: n = 1._dp
 
 end module
