@@ -15,9 +15,9 @@ integer, parameter :: abund_max = 2**6
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
 integer, parameter :: nwindow = 2**7
 ! Number of points in correlation vector
-integer, parameter :: ncorr = 2**4
+integer, parameter :: ncorr = 2**6
 ! Maximum time lag for correlation vector
-real(dp), parameter :: maxlag = 3.0_dp
+real(dp), parameter :: maxlag = 5.0_dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 

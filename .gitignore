@@ -1,0 +1,7 @@
+# Directories
+data/
+res/
+bin/
+# File extensions
+*.mod
+*.f90.o
