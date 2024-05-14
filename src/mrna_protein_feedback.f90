@@ -34,13 +34,20 @@ real(dp) :: corr(ncorr,4), corr_mean(2,ncorr,4)=0._dp, corr_mean2(ncorr,4)=0._dp
 real(dp) :: dcorr(ncorr)
 integer :: xwindow(2, nwindow)=0
 ! Miscellaneous 
-real(dp) :: propensity(4)
+real(dp) :: propensity(4), roll
 integer :: i, j, mp(2)=0, nevents(4)=0, event
 
 
-call random_seed(put=seed)
-! call random_seed()
+! call random_seed(put=seed)
+call random_seed()
 
+! Randomize variables when testing, if we so choose.
+call random_uniform(roll, -1._dp, 1._dp)
+alpha = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+beta = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+tau(2) = 10._dp**roll
 
 do while (minval(nevents) < event_min)
 	! Exit the program if we exceed maximum abundance.
