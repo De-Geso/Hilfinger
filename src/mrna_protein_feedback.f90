@@ -13,7 +13,7 @@ integer, parameter :: event_min = 10**6
 integer, parameter :: abund_max = 2**6
 
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
-integer, parameter :: nwindow = 2**7
+integer, parameter :: nwindow = 2**8
 ! Number of points in correlation vector
 integer, parameter :: ncorr = 2**6
 ! Maximum time lag for correlation vector
@@ -42,12 +42,12 @@ integer :: i, j, mp(2)=0, nevents(4)=0, event
 call random_seed()
 
 ! Randomize variables when testing, if we so choose.
-call random_uniform(roll, -1._dp, 1._dp)
-alpha = 10._dp**roll
-call random_uniform(roll, -1._dp, 1._dp)
-beta = 10._dp**roll
-call random_uniform(roll, -1._dp, 1._dp)
-tau(2) = 10._dp**roll
+! call random_uniform(roll, -1._dp, 1._dp)
+! alpha = 10._dp**roll
+! call random_uniform(roll, -1._dp, 1._dp)
+! beta = 10._dp**roll
+! call random_uniform(roll, -1._dp, 1._dp)
+! tau(2) = 10._dp**roll
 
 do while (minval(nevents) < event_min)
 	! Exit the program if we exceed maximum abundance.
