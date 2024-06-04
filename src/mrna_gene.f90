@@ -47,6 +47,7 @@ do while (minval(nevents) < event_min)
 	
 	! Start calculating correlations once window is big enough.
 	if (ttail(1) /= 0.0) then
+		tcorr = tcorr + tstep
 		!$omp parallel
 		!$omp sections
 		!$omp section
@@ -85,8 +86,8 @@ cov = covariance_sim(mean, prob_cond)
 call moments_theory(mean_thry, cov_thry)
 
 ! Normalize correlation means.
-corr_mean2 = corr_mean2 / t
-corr_mean = corr_mean / t
+corr_mean2 = corr_mean2 / tcorr
+corr_mean = corr_mean / tcorr
 
 do j = 1, 4
 	do i = 1, corr_n
@@ -269,7 +270,7 @@ pure function correlation_theory(t) result (corr)
 	
 	! Amm
 	corr(1) = exp(-t/tau(1))
-	! Amp
+	! Apm
 	if (tau(1) /= tau(2)) then
 		corr(2) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
 				* cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
@@ -277,7 +278,7 @@ pure function correlation_theory(t) result (corr)
 		corr(2) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
 				* cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) / tau(2)
 	end if
-	! Apm
+	! Amp
 	corr(3) = exp(-t/tau(1))
 	! App
 	if (tau(1) /= tau(2)) then

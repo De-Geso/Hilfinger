@@ -16,9 +16,9 @@ integer, parameter :: abund_max = 10**3
 ! Reducing this gives big time savings.
 integer, parameter :: ntail = 2**7
 ! Length of correlation vector
-integer, parameter :: corr_n = 2**4
+integer, parameter :: corr_n = 2**1
 ! Maximum time lag for correlation
-real(dp), parameter :: lag_max = 3.0_dp
+real(dp), parameter :: lag_max = 0.1_dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*lag_max/(corr_n-1)
 
@@ -58,7 +58,7 @@ real(dp) :: dcorr(corr_n)
 ! Moments
 real(dp) :: mean(2), cov(2,2), mean_thry(2), cov_thry(2,2)
 ! Timers
-real(dp) :: ttail(ntail) = 0._dp, t, tstep
+real(dp) :: ttail(ntail) = 0._dp, t, tstep, tcorr=0._dp
 
 real(dp) :: roll
 character(*), parameter :: fout = "mrna_accum.dat"

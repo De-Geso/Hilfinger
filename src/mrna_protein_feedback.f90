@@ -10,20 +10,20 @@ real(dp), parameter :: eps = 1E-16_dp
 ! Number of events before stopping
 integer, parameter :: event_min = 10**6
 ! Maximum abundance. Program will exit if exceeded.
-integer, parameter :: abund_max = 2**6
+integer, parameter :: abund_max = 2**9
 
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
-integer, parameter :: nwindow = 2**8
+integer, parameter :: nwindow = 2**6
 ! Number of points in correlation vector
-integer, parameter :: ncorr = 2**6
+integer, parameter :: ncorr = 2**7
 ! Maximum time lag for correlation vector
-real(dp), parameter :: maxlag = 5.0_dp
+real(dp), parameter :: maxlag = 5._dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 
 ! Variables ============================================================
 ! Time
-real(dp) :: t=0._dp, tstep
+real(dp) :: t=0._dp, tcorr=0._dp, tstep
 ! Probabilities
 real(dp) :: pcond(abund_max, abund_max)=0._dp
 ! Moments
@@ -35,11 +35,17 @@ real(dp) :: dcorr(ncorr)
 integer :: xwindow(2, nwindow)=0
 ! Miscellaneous 
 real(dp) :: propensity(4), roll
-integer :: i, j, mp(2)=0, nevents(4)=0, event
+integer :: i, j, mp(2)=0, nevents(4)=0, event, nseed
+integer, allocatable :: rseed(:)
 
 
-! call random_seed(put=seed)
-call random_seed()
+call random_seed(put=seed)
+!call random_seed()
+
+! Get random seed for output in metadata
+call random_seed(size=nseed)
+allocate(rseed(nseed))
+call random_seed(get=rseed)
 
 ! Randomize variables when testing, if we so choose.
 ! call random_uniform(roll, -1._dp, 1._dp)
@@ -69,6 +75,7 @@ do while (minval(nevents) < event_min)
 	twindow(nwindow) = t
 	
 	if (twindow(1) > eps) then
+		tcorr = tcorr + tstep
 		!$omp parallel
 		!$omp sections
 		!$omp section
@@ -103,8 +110,8 @@ call simulation_moments(pcond, mean, meanR, cov)
 call theory_moments(pcond, thry_mean, thry_cov)
 
 ! Normalize correlation means.
-corr_mean2 = corr_mean2 / t
-corr_mean = corr_mean / t
+corr_mean2 = corr_mean2 / tcorr
+corr_mean = corr_mean / tcorr
 
 do j = 1, 4
 	do i = 1, ncorr
@@ -335,7 +342,7 @@ subroutine dump()
 	logical :: ex
 	
 	! Check file existances, and relabel with correct numbering
-	prefix = "mRNA_protein_feedback_correlation_sim_"
+	prefix = "feedback_correlation_"
 	suffix = ".dat"
 	fnum = 0
 	! Make filename. Check if it already exists. Increase number on filename.
@@ -370,7 +377,7 @@ subroutine dump()
 	! Correlations from simulation
 	open(newunit=io, file=fname, action='write')
 	call write_metadata_sim(io, &
-		"mRNA-protein system simulation unnormalized correlations and derivative of App from correlation relations.", &
+		"mRNA-protein system simulation normalized correlations and derivative of App from correlation relations. Derivative is also normalized by covariance.", &
 		"Time, Amm, Apm, Amp, App, dApp")
 
 	do i = 1, ncorr
@@ -378,14 +385,6 @@ subroutine dump()
 		write(io,*) t, corr(i,:), dcorr(i)
 	end do
 	close(io)
-	
-!	! Correlations from theory
-!	open(newunit=io, file='mrna_protein_feedback_theory_correlation.dat', action='write')
-!	do i = 1, ncorr
-!		t = (i-1)*corr_tstep
-!		write(io,*) t, theory_correlation(t, thry_mean, thry_cov)
-!	end do
-!	close(io)
 end subroutine
 
 
@@ -393,15 +392,21 @@ subroutine write_metadata_sim(io, desc, headers)
 ! Write metadata to file
 	integer, intent(in) :: io
 	character(len=*), intent(in) :: desc, headers
-	write(io,*) "# Metadata"
+	write(io,*) "# Program Metadata"
 	write(io,*) "# Program: mrna_protein_feedback.f90"
 	write(io,*) "# Description: ", desc
 	write(io,*) "# Creation date: ", fdate()
+	write(io,*) "# Seed: ", rseed
+	write(io,*) "# Min events: ", event_min
+	write(io,*) "# Maximum abundance: ", abund_max
+	write(io,*) "# Correlation window size: ", nwindow
+	write(io,*) "# Correlation vector length", ncorr
+	write(io,*) "# Correlation max lag", maxlag
 	write(io,*) ""
 	write(io,*) "# Parameter Metadata"
-	write(io,*) "# events: ", event_min
 	write(io,*) "# alpha: ", alpha
 	write(io,*) "# beta: ", beta
+	write(io,*) "# tau_m: ", tau(1)
 	write(io,*) "# tau_p: ", tau(2)
 	write(io,*) "# k: ", k
 	write(io,*) "# n: ", n
