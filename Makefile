@@ -17,7 +17,7 @@ BINDIR:= bin/
 
 PROGS := mrna_gene.f90 \
 	mrna_protein_feedback.f90 \
-	mrna_protein_weird_feedback.f90
+	mrna_protein_false_feedback.f90
 MODS := kind_parameters.f90 \
 	init_mrna_gene.f90 \
 	mrna_protein_system_parameters.f90 \
@@ -34,7 +34,7 @@ PROGOBJS := $(addsuffix .o, $(PROGSRCS))
 # Declare all public targets
 .PHONY: all clean
 
-all: mrna_gene mrna_protein_feedback mrna_protein_weird_feedback
+all: mrna_gene mrna_protein_feedback mrna_protein_false_feedback
 
 $(MODOBJS): %.o: %
 	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
@@ -48,7 +48,7 @@ mrna_gene: $(MODOBJS) src/mrna_gene.f90.o
 mrna_protein_feedback: $(MODOBJS) src/mrna_protein_feedback.f90.o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-mrna_protein_weird_feedback: $(MODOBJS) src/mrna_protein_weird_feedback.f90.o
+mrna_protein_false_feedback: $(MODOBJS) src/mrna_protein_false_feedback.f90.o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 
@@ -59,7 +59,7 @@ src/mrna_gene.f90.o: src/kind_parameters.f90.o src/init_mrna_gene.f90.o src/mrna
 
 src/mrna_protein_feedback.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
 
-src/mrna_protein_weird_feedback.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
+src/mrna_protein_false_feedback.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
 
 # Modules
 src/kind_parameters.f90:
@@ -81,9 +81,9 @@ run_mrna_protein_feedback: mrna_protein_feedback
 	date
 	./mrna_protein_feedback
 
-run_mrna_protein_weird_feedback: mrna_protein_weird_feedback
+run_mrna_protein_false_feedback: mrna_protein_false_feedback
 	date
-	./mrna_protein_weird_feedback
+	./mrna_protein_false_feedback
 
 # rebuild all object files in case this Makefile changes
 $(OBJS): $(MAKEFILE_LIST)

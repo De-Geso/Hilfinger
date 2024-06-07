@@ -1,4 +1,4 @@
-program mrna_protein_weird_feedback
+program mrna_protein_false_feedback
 ! mRNA-protein system with feedback. Here, we want to try incorrect
 ! predictions. For example, the system obeys p == beta*m => p+1, but
 ! we can calculate a correlation for an incorrect rate such as beta*m^2.
@@ -18,16 +18,16 @@ integer, parameter :: event_min = 10**6
 integer, parameter :: abund_max = 2**9
 
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
-integer, parameter :: nwindow = 2**6
+integer, parameter :: nwindow = 2**7
 ! Number of points in correlation vector
 integer, parameter :: ncorr = 2**6
 ! Maximum time lag for correlation vector
-real(dp), parameter :: maxlag = 5._dp
+real(dp), parameter :: maxlag = 3._dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 
 ! Fake power of m dependence
-real(dp), parameter :: l = 0._dp
+real(dp), parameter :: l = 1.5_dp
 
 ! Variables ============================================================
 ! Time
@@ -155,7 +155,7 @@ do i = 1,ncorr
 	fake_corr(i) = fake_corr_mean2(i) - fake_corr_mean(1,i)*fake_corr_mean(2,1)
 end do
 
-dcorr = -1._dp/tau(2) * (corr(:,4) - corr(:,3)*cov(2,1)/cov(2,2))
+dcorr = -mean(2)*mean(2)/tau(2) * (corr(:,4)/mean(2)/mean(2) - corr(:,3)/mean(1)/mean(2))
 
 call dump()
 
@@ -387,7 +387,7 @@ subroutine dump()
 	logical :: ex
 	
 	! Check file existances, and relabel with correct numbering
-	prefix = "fake_feedback_correlation_"
+	prefix = "false_feedback_correlation_"
 	suffix = ".dat"
 	fnum = 0
 	! Make filename. Check if it already exists. Increase number on filename.
@@ -402,7 +402,7 @@ subroutine dump()
 
 	! Console output
 	write(*,*) "Events: ", event_min
-	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau, "l=", l
 	write(*,*) "Mean rate: ", meanR
 	write(*,*) "Theoretical mean: ", thry_mean
 	write(*,*) "Simulation mean: ", mean
@@ -422,7 +422,7 @@ subroutine dump()
 	! Correlations from simulation
 	open(newunit=io, file=fname, action='write')
 	call write_metadata_sim(io, &
-		"mRNA-protein system simulation normalized correlations and derivative of App from correlation relations. Derivative is also normalized by covariance.", &
+		"mRNA-protein system simulation unnormalized correlations and derivative of App from correlation relations. Derivative is also normalized by covariance. Last column is Arp+p, which is the correlation of the fake rate with p.", &
 		"Time, Amm, Apm, Amp, App, dApp, fake_ARp+p")
 
 	do i = 1, ncorr
@@ -438,7 +438,7 @@ subroutine write_metadata_sim(io, desc, headers)
 	integer, intent(in) :: io
 	character(len=*), intent(in) :: desc, headers
 	write(io,*) "# Program Metadata"
-	write(io,*) "# Program: mrna_protein_weird_feedback.f90"
+	write(io,*) "# Program: mrna_protein_false_feedback.f90"
 	write(io,*) "# Description: ", desc
 	write(io,*) "# Creation date: ", fdate()
 	write(io,*) "# Seed: ", rseed
