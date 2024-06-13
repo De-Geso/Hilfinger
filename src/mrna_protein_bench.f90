@@ -13,9 +13,9 @@ integer, parameter :: abund_max = 2**6
 ! Size of burst for [x0, x1]
 integer, parameter, dimension(2) :: burst = [1, 1]
 ! x1 production rate
-real :: alpha = 7.2
+real :: lmbda = 7.2
 ! x2 production rate
-real :: beta = 10.
+real :: alpha = 10.
 ! Decay rates. Can always leave tau_1=1
 real, dimension(2) :: tau = [1., 0.1]
 ! Abundance update matrix.
@@ -83,7 +83,7 @@ mean = mean_sim(prob_cond)
 cov = covariance_sim(mean, prob_cond)
 call moments_theory(mean_thry, cov_thry)
 
-write(*,*) "alpha =", alpha, "beta =", beta, "tau_m =", tau(1), "tau_p =", tau(2)
+write(*,*) "lmbda =", lmbda, "alpha =", alpha, "tau_m =", tau(1), "tau_p =", tau(2)
 write(*,*) "Minimum number of reactions = ", event_min
 write(*,*) '<m>', mean(1), 'eta-mm', cov(1,1)
 write(*,*) '<p>', mean(2), 'eta-pp', cov(2,2)
@@ -141,8 +141,8 @@ end function
 subroutine moments_theory(mean, cov)
 	real, intent(inout) :: mean(2), cov(2,2)
 	
-	mean(1) = alpha*tau(1)
-	mean(2) = mean(1)*beta*tau(2)
+	mean(1) = lmbda*tau(1)
+	mean(2) = mean(1)*alpha*tau(2)
 	
 	cov(1,1) = 1./mean(1)
 	cov(1,2) = cov(1,1) * tau(1)/sum(tau)
@@ -182,9 +182,9 @@ pure function update_propensity(x) result(propensity)
 ! Updates propensities depending on the state of the system
 	integer, intent(in) :: x(2)
 	real :: propensity(4)
-	propensity(1) = alpha	! Make x1 (mRNA)
+	propensity(1) = lmbda	! Make x1 (mRNA)
 	propensity(2) = x(1)/tau(1)	! Degrade x1 (mRNA)
-	propensity(3) = beta*x(1)	! Make x2 (Protein)
+	propensity(3) = alpha*x(1)	! Make x2 (Protein)
 	propensity(4) = x(2)/tau(2)	! Degrade x2 (Protein)
 end function
 

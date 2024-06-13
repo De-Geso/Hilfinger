@@ -29,9 +29,9 @@ real(dp), parameter :: corr_tstep = 1._dp*lag_max/(corr_n-1)
 !! Size of burst for [x0, x1]
 !integer, parameter, dimension(2) :: burst = [1, 1]
 !! x1 production rate
-!real(dp) :: alpha = 1._dp
+!real(dp) :: lmbda = 1._dp
 !! x2 production rate
-!real(dp) :: beta = 1._dp
+!real(dp) :: alpha = 1._dp
 !! Decay rates. Can always leave tau_1=1
 !real(dp), dimension(2) :: tau = [1._dp, 1._dp]
 !! Hill function parameters

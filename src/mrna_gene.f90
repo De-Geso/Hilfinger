@@ -12,9 +12,9 @@ call random_seed()
 
 ! Randomize variables when testing, if we so choose.
 !call random_uniform(roll, -1._dp, 1._dp)
-!alpha = 10._dp**roll
+!lmbda = 10._dp**roll
 !call random_uniform(roll, -1._dp, 1._dp)
-!beta = 10._dp**roll
+!alpha = 10._dp**roll
 !call random_uniform(roll, -1._dp, 1._dp)
 !tau(2) = 10._dp**roll
 
@@ -31,7 +31,7 @@ do while (minval(nevents) < event_min)
 	! If we go over maximum abundance, stop.
 	if (maxval(x) >= abund_max) then
 		write(*,*) "Maximum abundance exceeded."
-		write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+		write(*,*) "lmbda=", lmbda, "alpha=", alpha, "Tau=", tau
 		call exit()
 	end if
 
@@ -123,7 +123,7 @@ subroutine update_corr(mean2, meanx, meany, y, x, tvec, dt)
 		write(*,*) "Error in update_corr: Required lag larger than recorded lag. Increase ntail."
 		write(*,*) "Recorded time lag: ", tvec(ntail)-tvec(1)
 		write(*,*) "Required time lag: ", lag_max
-		write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+		write(*,*) "lmbda=", lmbda, "alpha=", alpha, "Tau=", tau
 		call exit()
 	end if
 	
@@ -215,8 +215,8 @@ end function
 subroutine moments_theory(mean, cov)
 	real(dp), intent(inout) :: mean(2), cov(2,2)
 	
-	mean(1) = alpha*tau(1)
-	mean(2) = mean(1)*beta*tau(2)
+	mean(1) = lmbda*tau(1)
+	mean(2) = mean(1)*alpha*tau(2)
 	
 	cov(1,1) = 1./mean(1)
 	cov(1,2) = cov(1,1) * tau(1)/sum(tau)
@@ -256,9 +256,9 @@ pure function update_propensity(x) result(propensity)
 ! Updates propensities depending on the state of the system
 	integer, intent(in) :: x(2)
 	real(dp) :: propensity(4)
-	propensity(1) = 1._dp*alpha	! Make x1 (mRNA)
+	propensity(1) = 1._dp*lmbda	! Make x1 (mRNA)
 	propensity(2) = 1._dp*x(1)/tau(1)	! Degrade x1 (mRNA)
-	propensity(3) = 1._dp*beta*x(1)	! Make x2 (Protein)
+	propensity(3) = 1._dp*alpha*x(1)	! Make x2 (Protein)
 	propensity(4) = 1._dp*x(2)/tau(2)	! Degrade x2 (Protein)
 end function
 
@@ -272,20 +272,20 @@ pure function correlation_theory(t) result (corr)
 	corr(1) = exp(-t/tau(1))
 	! Apm
 	if (tau(1) /= tau(2)) then
-		corr(2) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
+		corr(2) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*alpha*tau(1)*tau(2) & 
 				* cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
 	else 
-		corr(2) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
+		corr(2) = exp(-t/tau(2)) + t*exp(-t/tau(2))*alpha*tau(1) & 
 				* cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) / tau(2)
 	end if
 	! Amp
 	corr(3) = exp(-t/tau(1))
 	! App
 	if (tau(1) /= tau(2)) then
-		corr(4) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*beta*tau(1)*tau(2) & 
+		corr(4) = exp(-t/tau(2)) + (exp(-t/tau(1))-exp(-t/tau(2)))*alpha*tau(1)*tau(2) & 
 				* cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
 	else
-		corr(4) = exp(-t/tau(2)) + t*exp(-t/tau(2))*beta*tau(1) & 
+		corr(4) = exp(-t/tau(2)) + t*exp(-t/tau(2))*alpha*tau(1) & 
 				* cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2) / tau(2)
 	end if
 end function
@@ -302,20 +302,20 @@ pure function dcorrelation_theory(t) result (dcorr)
 	! Apm
 	if (tau(1) /= tau(2)) then
 		dcorr(2) = -1./tau(2)*exp(-t/tau(2)) + (exp(-t/tau(2))/tau(2) - exp(-t/tau(1))/tau(1)) &
-				*beta*tau(1)*tau(2) * cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
+				*alpha*tau(1)*tau(2) * cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
 	else 
 		dcorr(2) = exp(-t/tau(2)) * ( -1./tau(1) + &
-				(1.-t/tau(1)) * beta * cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) )
+				(1.-t/tau(1)) * alpha * cov_thry(1,1)/cov_thry(1,2) * mean_thry(1)/mean_thry(2) )
 	end if
 	! Amp
 	dcorr(3) = -1/tau(1)*exp(-t/tau(1))
 	! App
 	if (tau(1) /= tau(2)) then
 		dcorr(4) = -1./tau(2)*exp(-t/tau(2)) + (exp(-t/tau(2))/tau(2)-exp(-t/tau(1))/tau(1)) &
-				*beta*tau(1)*tau(2) * cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
+				*alpha*tau(1)*tau(2) * cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2) / (tau(1)-tau(2))
 	else
 		dcorr(4) = exp(-t/tau(2)) * ( -1./tau(1) + &
-				(1.-t/tau(1)) * beta * cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2))
+				(1.-t/tau(1)) * alpha * cov_thry(2,1)/cov_thry(2,2) * mean_thry(1)/mean_thry(2))
 	end if
 end function
 
@@ -330,7 +330,7 @@ subroutine dump()
 	
 ! Console output =======================================================
 	write(*,*) "Events: ", event_min
-	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+	write(*,*) "lmbda=", lmbda, "alpha=", alpha, "Tau=", tau
 	write(*,*) "Theoretical Mean: ", mean_thry
 	write(*,*) "Simulation mean: ", mean
 	write(*,*) "Percent difference: ", &
@@ -384,11 +384,11 @@ subroutine dump()
 		chi2 = chi2 + (dcorr(i) - dcorr_thry(4))**2 / corr_n
 	end do
 	open(newunit=io, file='chi_squared.dat', action='write', position='append')
-		write(io,*) chi2, corr_n, sum(nevents), lag_max, alpha, beta, tau
+		write(io,*) chi2, corr_n, sum(nevents), lag_max, lmbda, alpha, tau
 	close(io)
 	
 	open(newunit=io, file='percent_difference.dat', action='write', position='append')
-		write(io,*) alpha, beta, tau, event_min, &
+		write(io,*) lmbda, alpha, tau, event_min, &
 			percent_difference(mean_thry(1), mean(1)), &
 			percent_difference(mean_thry(2), mean(2)), &
 			percent_difference(cov_thry(1,1), cov(1,1)), &
@@ -419,8 +419,8 @@ subroutine write_metadata_sim(io, desc, headers)
 	write(io,*) "# Creation date: ", fdate()
 	write(io,*) ""
 	write(io,*) "# Parameter Metadata"
+	write(io,*) "# lmbda: ", lmbda
 	write(io,*) "# alpha: ", alpha
-	write(io,*) "# beta: ", beta
 	write(io,*) "# tau_p: ", tau(2)
 	write(io,*) "# mavg: ", mean(1)
 	write(io,*) "# pavg: ", mean(2)
@@ -444,8 +444,8 @@ subroutine write_metadata_thry(io, desc, headers)
 	write(io,*) "# Creation date: ", fdate()
 	write(io,*) ""
 	write(io,*) "# Parameter Metadata"
+	write(io,*) "# lmbda: ", lmbda
 	write(io,*) "# alpha: ", alpha
-	write(io,*) "# beta: ", beta
 	write(io,*) "# tau_p: ", tau(2)
 	write(io,*) "# mavg: ", mean_thry(1)
 	write(io,*) "# pavg: ", mean_thry(2)
@@ -487,7 +487,7 @@ end subroutine
 !	! Create probability distributions for x1 and x2 from joint
 !	! probability distribution, create labels while we're at it.
 !	do i = 1, abund_max
-!		rate_values(i) = alpha
+!		rate_values(i) = lmbda
 !		labels(i) = i-1
 !		p(1,i) = sum(pij(i,:))
 !		p(2,i) = sum(pij(:,i))
@@ -496,7 +496,7 @@ end subroutine
 !	! Check means
 !	mean_rate = dot_product(rate_values, prob_rate)
 !	theory_mean(1) = mean_rate*tau(1)
-!	theory_mean(2) = theory_mean(1)*beta*tau(2)
+!	theory_mean(2) = theory_mean(1)*alpha*tau(2)
 !	mean = matmul(p, labels)
 !	write(*,*) 'Theory mean: ', theory_mean
 !	write(*,*) 'Simulation mean: ', mean

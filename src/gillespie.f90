@@ -3,15 +3,15 @@ program gillespie
 ! algorithm. Imagine a feedback control system. mRNA is produced, which
 ! triggers the production of a Protein. Both decay at some rate which
 ! depends on their abundance.
-! x0 == R >> x0 + a			x1 == alpha x0 >> x1 + b
+! x0 == R >> x0 + a			x1 == lmbda x0 >> x1 + b
 ! x0 == x0/tau1 >> x0 - 1	x1 == x1/tau1 >> x1 - 1
 use kind_parameters
 implicit none
 
 ! == System parameters ==
 integer, dimension(2), parameter :: burst = [1, 1]	! Size of burst for [x0, x1]
-real(dp), parameter :: beta = 1.0_dp	! x0 production rate
-real(dp), parameter :: alpha = 1.0_dp	! x1 production rate constant
+real(dp), parameter :: alpha = 1.0_dp	! x0 production rate
+real(dp), parameter :: lmbda = 1.0_dp	! x1 production rate constant
 real(dp), parameter, dimension(2) :: r = [1.0_dp, 1.0_dp]	! Decay rates
 integer, parameter, dimension(4,2) :: abund_update = &	! Abundance update matrix
 	reshape((/burst(1), 0, &
@@ -127,9 +127,9 @@ end subroutine
 subroutine update_propensity(x)
 	integer, intent(in) :: x(2)
 	
-	propensity(1) = beta		! Make x0 (mRNA)
+	propensity(1) = alpha		! Make x0 (mRNA)
 	propensity(2) = x(1)*r(1)	! Degrade x0 (mRNA)
-	propensity(3) = alpha*x(1)	! Make x1 (Protein)
+	propensity(3) = lmbda*x(1)	! Make x1 (Protein)
 	propensity(4) = x(2)*r(2)	! Degrade x1 (Protein)
 end subroutine
 

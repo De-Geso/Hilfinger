@@ -15,9 +15,9 @@ integer, parameter :: abund_max = 2**9
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
 integer, parameter :: nwindow = 2**8
 ! Number of points in correlation vector
-integer, parameter :: ncorr = 2**7
+integer, parameter :: ncorr = 2**8
 ! Maximum time lag for correlation vector
-real(dp), parameter :: maxlag = 10._dp
+real(dp), parameter :: maxlag = 20._dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 
@@ -49,9 +49,9 @@ call random_seed(get=rseed)
 
 ! Randomize variables when testing, if we so choose.
 ! call random_uniform(roll, -1._dp, 1._dp)
-! alpha = 10._dp**roll
+! lmbda = 10._dp**roll
 ! call random_uniform(roll, -1._dp, 1._dp)
-! beta = 10._dp**roll
+! alpha = 10._dp**roll
 ! call random_uniform(roll, -1._dp, 1._dp)
 ! tau(2) = 10._dp**roll
 
@@ -59,7 +59,7 @@ do while (minval(nevents) < event_min)
 	! Exit the program if we exceed maximum abundance.
 	if (maxval(mp) >= abund_max) then
 		write(*,*) "Maximum abundance exceeded."
-		write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+		write(*,*) "lmbda=", lmbda, "alpha=", alpha, "Tau=", tau
 		call exit()
 	end if
 	
@@ -197,7 +197,7 @@ subroutine theory_moments(pcond, mean, cov)
 	
 	! Mean abundances
 	mean(1) = 1._dp * burst(1)*tau(1)*meanR
-	mean(2) = 1._dp * burst(2)*beta*tau(2)*mean(1)
+	mean(2) = 1._dp * burst(2)*alpha*tau(2)*mean(1)
 	
 	! Second moments
 	cov = 0._dp
@@ -229,7 +229,7 @@ subroutine update_correlation(mean2, meanx, meany, y, x, tvec, dt)
 		write(*,*) "Error in update_corr: Required lag larger than recorded lag. Increase nwindow."
 		write(*,*) "Recorded time lag: ", tvec(nwindow)-tvec(1)
 		write(*,*) "Required time lag: ", maxlag
-		write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+		write(*,*) "lmbda=", lmbda, "alpha=", alpha, "Tau=", tau
 		call exit()
 	end if
 	
@@ -307,7 +307,7 @@ pure function update_propensity(x) result(prop)
 	real(dp) :: prop(4)
 	prop(1) = 1._dp * R(real(x,dp))	! Make mRNA
 	prop(2) = 1._dp * x(1)/tau(1)	! Degrade mRNA
-	prop(3) = 1._dp * beta*x(1)	! Make protein
+	prop(3) = 1._dp * alpha*x(1)	! Make protein
 	prop(4) = 1._dp * x(2)/tau(2)	! Degrade protein
 end function
 
@@ -317,8 +317,8 @@ pure function R(x) result(f)
 	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	f = 1._dp * alpha * hill(p)
-	! f = 1._dp * alpha
+	f = 1._dp * lmbda * hill(p)
+	! f = 1._dp * lmbda
 	end associate
 end function
 
@@ -357,7 +357,7 @@ subroutine dump()
 
 	! Console output
 	write(*,*) "Events: ", event_min
-	write(*,*) "alpha=", alpha, "beta=", beta, "Tau=", tau
+	write(*,*) "lmbda=", lmbda, "alpha=", alpha, "Tau=", tau
 	write(*,*) "Mean rate: ", meanR
 	write(*,*) "Theoretical mean: ", thry_mean
 	write(*,*) "Simulation mean: ", mean
@@ -404,8 +404,8 @@ subroutine write_metadata_sim(io, desc, headers)
 	write(io,*) "# Correlation max lag", maxlag
 	write(io,*) ""
 	write(io,*) "# Parameter Metadata"
+	write(io,*) "# lmbda: ", lmbda
 	write(io,*) "# alpha: ", alpha
-	write(io,*) "# beta: ", beta
 	write(io,*) "# tau_m: ", tau(1)
 	write(io,*) "# tau_p: ", tau(2)
 	write(io,*) "# k: ", k
