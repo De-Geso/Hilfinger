@@ -13,11 +13,11 @@ integer, parameter :: event_min = 10**6
 integer, parameter :: abund_max = 2**9
 
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
-integer, parameter :: nwindow = 2**8
+integer, parameter :: nwindow = 2**9
 ! Number of points in correlation vector
-integer, parameter :: ncorr = 2**8
+integer, parameter :: ncorr = 2**6
 ! Maximum time lag for correlation vector
-real(dp), parameter :: maxlag = 20._dp
+real(dp), parameter :: maxlag = 5._dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 
@@ -39,8 +39,8 @@ integer :: i, j, mp(2)=0, nevents(4)=0, event, nseed
 integer, allocatable :: rseed(:)
 
 
-call random_seed(put=seed)
-!call random_seed()
+! call random_seed(put=seed)
+call random_seed()
 
 ! Get random seed for output in metadata
 call random_seed(size=nseed)
@@ -48,12 +48,12 @@ allocate(rseed(nseed))
 call random_seed(get=rseed)
 
 ! Randomize variables when testing, if we so choose.
-! call random_uniform(roll, -1._dp, 1._dp)
-! lmbda = 10._dp**roll
-! call random_uniform(roll, -1._dp, 1._dp)
-! alpha = 10._dp**roll
-! call random_uniform(roll, -1._dp, 1._dp)
-! tau(2) = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+lmbda = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+alpha = 10._dp**roll
+call random_uniform(roll, -1._dp, 1._dp)
+tau(2) = 10._dp**roll
 
 do while (minval(nevents) < event_min)
 	! Exit the program if we exceed maximum abundance.
@@ -305,7 +305,7 @@ pure function update_propensity(x) result(prop)
 ! Updates propensities depending on the state of the system
 	integer, intent(in) :: x(2)
 	real(dp) :: prop(4)
-	prop(1) = 1._dp * R(real(x,dp))	! Make mRNA
+	prop(1) = 1._dp * lmbda * R(real(x,dp))	! Make mRNA
 	prop(2) = 1._dp * x(1)/tau(1)	! Degrade mRNA
 	prop(3) = 1._dp * alpha*x(1)	! Make protein
 	prop(4) = 1._dp * x(2)/tau(2)	! Degrade protein
@@ -317,7 +317,7 @@ pure function R(x) result(f)
 	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	f = 1._dp * lmbda * hill(p)
+	f = 1._dp * hill(p)
 	! f = 1._dp * lmbda
 	end associate
 end function

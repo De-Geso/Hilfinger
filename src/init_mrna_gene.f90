@@ -10,15 +10,15 @@ real(dp), parameter :: pi = 4.D0*DATAN(1.D0)
 ! Number of events before stopping
 integer, parameter :: event_min = 10**6
 ! Maximum abundances. Program will exit if this is exceeded
-integer, parameter :: abund_max = 10**3
+integer, parameter :: abund_max = 2**9
 
 ! Number of abundance updates to remember for correlation.
 ! Reducing this gives big time savings.
 integer, parameter :: ntail = 2**7
 ! Length of correlation vector
-integer, parameter :: corr_n = 2**1
+integer, parameter :: corr_n = 2**6
 ! Maximum time lag for correlation
-real(dp), parameter :: lag_max = 0.1_dp
+real(dp), parameter :: lag_max = 5._dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*lag_max/(corr_n-1)
 

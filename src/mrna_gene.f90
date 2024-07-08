@@ -94,9 +94,9 @@ do j = 1, 4
 		! Combine the variances and means into the correlation (normalized by variance)
 		corr(i,j) = (corr_mean2(i,j) - corr_mean(1,i,j)*corr_mean(2,1,j)) / &
 				(corr_mean2(1,j)-corr_mean(1,i,j)*corr_mean(2,1,j))
-	!	This works if you normalize by the mean as well. This is because our covariance is normalized by the mean
-	!	but in the definition of the correlation, it is not.
-	!	corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / (covar(1,2)*mean(1)*mean(2))
+		! This works if you normalize by the mean as well. This is because our covariance is normalized by the mean
+		! but in the definition of the correlation, it is not.
+		! corr(i) = (corr_mean2(i) - corr_mean(1,i)*corr_mean(2,1)) / (covar(1,2)*mean(1)*mean(2))
 	end do
 end do
 

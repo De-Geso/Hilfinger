@@ -18,7 +18,7 @@ integer, parameter :: event_min = 10**6
 integer, parameter :: abund_max = 2**9
 
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
-integer, parameter :: nwindow = 2**8
+integer, parameter :: nwindow = 2**9
 ! Number of points in correlation vector
 integer, parameter :: ncorr = 2**6
 ! Maximum time lag for correlation vector
@@ -35,22 +35,24 @@ real(dp) :: t=0._dp, tcorr=0._dp, tstep
 ! Probabilities
 real(dp) :: pcond(abund_max, abund_max)=0._dp
 ! Moments
-real(dp) :: mean(2), meanR, cov(2,2), thry_mean(2), thry_cov(2,2)
+real(dp) :: mean(2), meanR(2), cov(2,2), thry_mean(2), thry_cov(2,2)
 ! Correlation pieces
-real(dp) :: corr(ncorr,4), corr_mean(2,ncorr,4)=0._dp, corr_mean2(ncorr,4)=0._dp, &
+real(dp) :: corr(ncorr,5), corr_mean(2,ncorr,5)=0._dp, corr_mean2(ncorr,5)=0._dp, &
 	twindow(nwindow)=0._dp
 real(dp) :: dcorr(ncorr)
-integer :: xwindow(2, nwindow)=0
+real(dp) :: xwindow(2, nwindow)=0
+real(dp) :: Rwindow(nwindow)=0
 ! Fake moments
 real(dp) :: fake_mean
 ! Fake correlation pieces
 real(dp) :: fake_corr(ncorr), fake_corr_mean(2,ncorr)=0._dp, fake_corr_mean2(ncorr)=0._dp
-integer :: fake_xwindow(nwindow)=0
+real(dp) :: fake_xwindow(nwindow)=0
 ! Miscellaneous 
 real(dp) :: propensity(4), roll
 integer :: i, j, mp(2)=0, nevents(4)=0, event, nseed
 integer, allocatable :: rseed(:)
 
+! ======================================================================
 
 call random_seed(put=seed)
 !call random_seed()
@@ -89,6 +91,10 @@ do while (minval(nevents) < event_min)
 	twindow(:nwindow-1) = twindow(2:nwindow)
 	twindow(nwindow) = t
 	
+	! Track the real rate, h
+	Rwindow(:nwindow-1) = Rwindow(2:nwindow)
+	Rwindow(nwindow) = h(real(mp,dp))
+	
 	! Track the fake rate, m^l
 	fake_xwindow(:nwindow-1) = fake_xwindow(2:nwindow)
 	fake_xwindow(nwindow) = g(mp(1), l)
@@ -111,9 +117,13 @@ do while (minval(nevents) < event_min)
 		call update_correlation(corr_mean2(:,4), corr_mean(1,:,4), corr_mean(2,:,4), &
 			xwindow(2,:), xwindow(2,:), twindow, tstep)
 		
-		! Fake correlations
 		!$omp section
-		! ARrp+,p for the fake rate.
+		! ARp+, p for the real rate.
+		call update_correlation(corr_mean2(:,5), corr_mean(1,:,5), corr_mean(2,:,5), &
+			Rwindow, xwindow(2,:), twindow, tstep)
+		
+		!$omp section
+		! ARp+,p for the fake rate.
 		call update_correlation(fake_corr_mean2, fake_corr_mean(1,:), fake_corr_mean(2,:), &
 			fake_xwindow, xwindow(2,:), twindow, tstep)
 		!$omp end sections
@@ -143,7 +153,7 @@ fake_corr_mean2 = fake_corr_mean2 / tcorr
 fake_corr_mean = fake_corr_mean / tcorr
 
 
-do j = 1, 4
+do j = 1, 5
 	do i = 1, ncorr
 		! Combine the variances and means into the correlation
 		! These are not normalized for this program because I don't 
@@ -153,7 +163,7 @@ do j = 1, 4
 end do
 
 ! Assemble fake correlation
-do i = 1,ncorr
+do i = 1, ncorr
 	fake_corr(i) = fake_corr_mean2(i) - fake_corr_mean(1,i)*fake_corr_mean(2,1)
 end do
 
@@ -168,7 +178,7 @@ contains
 subroutine simulation_moments(pcond, mean, meanR, cov, fake_mean)
 ! Calculate mean abundances and covariance matrix (eta--normalized)
 ! from conditional probability distribution.
-	real(dp), intent(out) :: mean(2), meanR, cov(2,2), fake_mean
+	real(dp), intent(out) :: mean(2), meanR(2), cov(2,2), fake_mean
 	real(dp), intent(in) :: pcond(abund_max, abund_max)
 	real(dp) :: p(abund_max, 2), x(abund_max)
 	integer :: i, j
@@ -186,7 +196,8 @@ subroutine simulation_moments(pcond, mean, meanR, cov, fake_mean)
 	meanR = 0._dp
 	do i = 1, abund_max
 	do j = 1, abund_max
-		meanR = meanR + pcond(i,j)*R([x(i),x(j)])
+		meanR(1) = meanR(1) + pcond(i,j)*R([x(i),x(j)])
+		meanR(2) = meanR(2) + pcond(i,j)*h([x(i),x(j)])
 		fake_mean = fake_mean + pcond(i,j)*g(int(x(i)), l)
 	end do
 	end do
@@ -211,7 +222,7 @@ subroutine theory_moments(pcond, mean, cov)
 ! Calculate the theoretical means and covariances.
 	real(dp), intent(in) :: pcond(abund_max, abund_max)
 	real(dp), intent(out) :: mean(2), cov(2,2)
-	real(dp) :: meanR, p(abund_max, 2), s(2), x(abund_max)
+	real(dp) :: meanR(2), p(abund_max, 2), s(2), x(abund_max)
 	integer :: i, j
 	
 	do i = 1, abund_max
@@ -229,25 +240,26 @@ subroutine theory_moments(pcond, mean, cov)
 	meanR = 0._dp
 	do i = 1, abund_max
 	do j = 1, abund_max
-		meanR = meanR + pcond(i,j)*R([x(i),x(j)])
+		meanR(1) = meanR(1) + pcond(i,j)*R([x(i),x(j)])
+		meanR(2) = meanR(2) + pcond(i,j)*h([x(i),x(j)])
 	end do
 	end do
 	
 	! Mean abundances
-	mean(1) = 1._dp * burst(1)*tau(1)*meanR
-	mean(2) = 1._dp * burst(2)*alpha*tau(2)*mean(1)
+	mean(1) = 1._dp * burst(1)*tau(1)*meanR(1)
+	mean(2) = 1._dp * burst(2)*tau(2)*meanR(2)
 	
 	! Second moments
 	cov = 0._dp
 	
 	do i = 1, abund_max
 	do j = 1, abund_max
-		cov(1,1) = cov(1,1) + (pcond(i,j) * (x(i) - mean(1)) * (R([x(i), x(j)]) - meanR))
-		cov(1,2) = cov(1,2) + (pcond(i,j) * (x(j) - mean(2)) * (R([x(i), x(j)]) - meanR))
+		cov(1,1) = cov(1,1) + (pcond(i,j) * (x(i) - mean(1)) * (R([x(i), x(j)]) - meanR(1)))
+		cov(1,2) = cov(1,2) + (pcond(i,j) * (x(j) - mean(2)) * (R([x(i), x(j)]) - meanR(1)))
 	end do
 	end do
-	cov(1,1) = cov(1,1)/(mean(1)*meanR) + s(1)/mean(1)
-	cov(1,2) = tau(1)/sum(tau) * cov(1,1) + tau(2)/sum(tau) * cov(1,2)/(mean(2)*meanR)
+	cov(1,1) = cov(1,1)/(mean(1)*meanR(1)) + s(1)/mean(1)
+	cov(1,2) = tau(1)/sum(tau) * cov(1,1) + tau(2)/sum(tau) * cov(1,2)/(mean(2)*meanR(1))
 	cov(2,1) = cov(1,2)
 	cov(2,2) = s(2)/mean(2) + cov(1,2)
 end subroutine
@@ -256,7 +268,7 @@ end subroutine
 subroutine update_correlation(mean2, meanx, meany, y, x, tvec, dt)
 ! Iteratively updates correlation variables (covariance and mean) every time step.
 !	real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
-	integer, intent(in) :: x(nwindow), y(nwindow)
+	real(dp), intent(in) :: x(nwindow), y(nwindow)
 	real(dp), intent(in) :: tvec(nwindow), dt
 	real(dp), intent(inout) :: mean2(ncorr), meanx(ncorr), meany(ncorr)
 	real(dp) :: t, ta, tb
@@ -343,9 +355,9 @@ pure function update_propensity(x) result(prop)
 ! Updates propensities depending on the state of the system
 	integer, intent(in) :: x(2)
 	real(dp) :: prop(4)
-	prop(1) = 1._dp * R(real(x,dp))	! Make mRNA
+	prop(1) = 1._dp * lmbda * R(real(x,dp))	! Make mRNA
 	prop(2) = 1._dp * x(1)/tau(1)	! Degrade mRNA
-	prop(3) = 1._dp * alpha*x(1)	! Make protein
+	prop(3) = 1._dp * alpha * h(real(x,dp))	! Make protein
 	prop(4) = 1._dp * x(2)/tau(2)	! Degrade protein
 end function
 
@@ -359,13 +371,23 @@ pure function g(x, l) result(f)
 end function
 
 
+pure function h(x) result(f)
+! Production function for protein.
+	real(dp), intent(in) :: x(2)
+	real(dp) :: f
+	associate(m => x(1), p => x(2))
+		f = 1._dp * x(1) * x(1)
+		! f = 1._dp
+	end associate
+end function
+
+
 pure function R(x) result(f)
 ! Production function for mRNA.
 	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	f = 1._dp * lmbda * hill(p)
-	! f = 1._dp * lmbda
+	f = 1._dp * hill(p)
 	end associate
 end function
 
@@ -424,8 +446,8 @@ subroutine dump()
 	! Correlations from simulation
 	open(newunit=io, file=fname, action='write')
 	call write_metadata_sim(io, &
-		"mRNA-protein system simulation unnormalized correlations and derivative of App from correlation relations. Derivative is also normalized by covariance. Last column is Arp+p, which is the correlation of the fake rate with p.", &
-		"Time, Amm, Apm, Amp, App, dApp, fake_ARp+p")
+		"mRNA-protein system simulation unnormalized correlations and derivative of App from correlation relations.", &
+		"Time, Amm, Apm, Amp, App, ARp+p dApp, fake_ARp+p")
 
 	do i = 1, ncorr
 		t = (i-1)*corr_tstep
@@ -461,7 +483,8 @@ subroutine write_metadata_sim(io, desc, headers)
 	write(io,*) "# fakeavg: ", fake_mean
 	write(io,*) "# mavg: ", mean(1)
 	write(io,*) "# pavg: ", mean(2)
-	write(io,*) "# Ravg: ", meanR
+	write(io,*) "# Rmavg: ", meanR(1)
+	write(io,*) "# Rpavg: ", meanR(2)
 	write(io,*) "# etamm: ", cov(1,1)
 	write(io,*) "# etamp: ", cov(1,2)
 	write(io,*) "# etapm: ", cov(2,1)
