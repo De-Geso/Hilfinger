@@ -83,10 +83,10 @@ run_mrna_protein_feedback: mrna_protein_feedback
 
 run_mrna_protein_false_feedback: mrna_protein_false_feedback
 	date
-	@if [ -z "$(l)" ]; then \
-		echo "Usage: make run_mrna_protein_false_feedback l=<value>"; \
+	@if [ -z "$(l1)" ] || [ -z "$(l2)" ]; then \
+		echo "Usage: make run_mrna_protein_false_feedback l1=<value> l2=<value>"; \
 	else \
-		./mrna_protein_false_feedback $(l); \
+		./mrna_protein_false_feedback $(l1) $(l2); \
 	fi
 
 # rebuild all object files in case this Makefile changes

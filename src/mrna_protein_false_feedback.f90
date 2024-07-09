@@ -35,13 +35,13 @@ real(dp) :: t=0._dp, tcorr=0._dp, tstep
 ! Probabilities
 real(dp) :: pcond(abund_max, abund_max)=0._dp
 ! Moments
-real(dp) :: mean(2), meanR(2), cov(2,2), thry_mean(2), thry_cov(2,2)
+real(dp) :: mean(2), meanR(3), cov(2,2), thry_mean(2), thry_cov(2,2)
 ! Correlation pieces
 real(dp) :: corr(ncorr,5), corr_mean(2,ncorr,5)=0._dp, corr_mean2(ncorr,5)=0._dp, &
 	twindow(nwindow)=0._dp
 real(dp) :: dcorr(ncorr)
 real(dp) :: xwindow(2, nwindow)=0
-real(dp) :: Rwindow(nwindow)=0
+real(dp) :: Rwindow(2, nwindow)=0
 ! Fake moments
 real(dp) :: fake_mean
 ! Fake correlation pieces
@@ -65,6 +65,8 @@ call random_seed(get=rseed)
 call get_command_line_arg(l(1), 1)
 call get_command_line_arg(l(2), 2)
 
+write(*,*) l
+
 ! Randomize variables when testing, if we so choose.
 ! call random_uniform(roll, -1._dp, 1._dp)
 ! lmbda = 10._dp**roll
@@ -87,18 +89,18 @@ do while (minval(nevents) < event_min)
 	t = t + tstep
 
 	! Track the abundances and time in a window for correlations.
-	xwindow(:,:nwindow-1) = xwindow(:,2:nwindow)
-	xwindow(:,nwindow) = mp(:)
+	xwindow(:, :nwindow-1) = xwindow(:, 2:nwindow)
+	xwindow(:, nwindow) = mp(:)
 	twindow(:nwindow-1) = twindow(2:nwindow)
 	twindow(nwindow) = t
 	
 	! Track the real rates, Pbirth, Pdeath
-	Rwindow(:nwindow-1) = Rwindow(2:nwindow)
-	Rwindow(nwindow) = Pbirth(real(mp,dp))
+	Rwindow(:, :nwindow-1) = Rwindow(:, 2:nwindow)
+	Rwindow(:, nwindow) = [Pbirth(real(mp,dp)), Pdeath(real(mp,dp))]
 	
 	! Track the fake rates, m^l1, p^l2/tau_p
 	fake_xwindow(:nwindow-1) = fake_xwindow(2:nwindow)
-	fake_xwindow(nwindow) = g(mp(1), l)
+	fake_xwindow(nwindow) = fakePbirth(real(mp,dp), l)
 	
 	if (twindow(1) > eps) then
 		! Record a special time to divide correlation means by. Otherwise we're off by ~20 seconds
@@ -179,7 +181,7 @@ contains
 subroutine simulation_moments(pcond, mean, meanR, cov, fake_mean)
 ! Calculate mean abundances and covariance matrix (eta--normalized)
 ! from conditional probability distribution.
-	real(dp), intent(out) :: mean(2), meanR(2), cov(2,2), fake_mean
+	real(dp), intent(out) :: mean(2), meanR(3), cov(2,2), fake_mean
 	real(dp), intent(in) :: pcond(abund_max, abund_max)
 	real(dp) :: p(abund_max, 2), x(abund_max)
 	integer :: i, j
@@ -199,7 +201,8 @@ subroutine simulation_moments(pcond, mean, meanR, cov, fake_mean)
 	do j = 1, abund_max
 		meanR(1) = meanR(1) + pcond(i,j)*R([x(i),x(j)])
 		meanR(2) = meanR(2) + pcond(i,j)*Pbirth([x(i),x(j)])
-		fake_mean = fake_mean + pcond(i,j)*g(int(x(i)), l)
+		meanR(3) = meanR(3) + pcond(i,j)*Pdeath([x(i),x(j)])
+		fake_mean = fake_mean + pcond(i,j)*fakePbirth([x(i),x(j)], l(1))
 	end do
 	end do
 	
@@ -223,7 +226,7 @@ subroutine theory_moments(pcond, mean, cov)
 ! Calculate the theoretical means and covariances.
 	real(dp), intent(in) :: pcond(abund_max, abund_max)
 	real(dp), intent(out) :: mean(2), cov(2,2)
-	real(dp) :: meanR(2), p(abund_max, 2), s(2), x(abund_max)
+	real(dp) :: meanR(3), p(abund_max, 2), s(2), x(abund_max)
 	integer :: i, j
 	
 	do i = 1, abund_max
@@ -243,6 +246,7 @@ subroutine theory_moments(pcond, mean, cov)
 	do j = 1, abund_max
 		meanR(1) = meanR(1) + pcond(i,j)*R([x(i),x(j)])
 		meanR(2) = meanR(2) + pcond(i,j)*Pbirth([x(i),x(j)])
+		meanR(3) = meanR(3) + pcond(i,j)*Pdeath([x(i),x(j)])
 	end do
 	end do
 	
@@ -365,12 +369,29 @@ pure function update_propensity(x) result(prop)
 end function
 
 
-pure function g(x, l) result(f)
-! The fake rate we want to give to the fake correlation.
-	integer, intent(in) :: x
-	real(dp), intent(in) :: l
+pure function fakePbirth(x, l) result(f)
+! The fake birth rate we want to give to the fake correlation.
+	real(dp), intent(in) :: x(2)
+	real(dp), intent(in) :: l(2)
 	real(dp) :: f
-	f = x**l
+	associate(m => x(1), p => x(2))
+		f = 1._dp * m**l(1)
+	end associate
+	! Don't forget to multiply by alpha!
+	f = alpha * f
+end function
+
+
+pure function fakePdeath(x, l) result(f)
+! The fake rate we want to give to the fake correlation.
+	real(dp), intent(in) :: x(2)
+	real(dp), intent(in) :: l(2)
+	real(dp) :: f
+	associate(m => x(1), p => x(2))
+		f = 1._dp * p**l(2)
+	end associate
+	! Don't forget to divide by tau_p!
+	f = f / tau(2)
 end function
 
 
@@ -497,12 +518,14 @@ subroutine write_metadata_sim(io, desc, headers)
 	write(io,*) "# tau_p: ", tau(2)
 	write(io,*) "# k: ", k
 	write(io,*) "# n: ", n
-	write(io,*) "# l: ", l
+	write(io,*) "# l1: ", l(1)
+	write(io,*) "# l2: ", l(2)
 	write(io,*) "# fakeavg: ", fake_mean
 	write(io,*) "# mavg: ", mean(1)
 	write(io,*) "# pavg: ", mean(2)
 	write(io,*) "# Rmavg: ", meanR(1)
-	write(io,*) "# Rpavg: ", meanR(2)
+	write(io,*) "# Rp_birth: ", meanR(2)
+	write(io,*) "# Rp_death: ", meanR(3)
 	write(io,*) "# etamm: ", cov(1,1)
 	write(io,*) "# etamp: ", cov(1,2)
 	write(io,*) "# etapm: ", cov(2,1)

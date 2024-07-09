@@ -19,7 +19,7 @@ subroutine get_command_line_arg(x, i)
 	character(len=32) :: arg
 	
 	! Get first command line argument
-	call get_command_argument(1, arg)
+	call get_command_argument(i, arg)
 	! Convert argument from string to real
 	read(arg, *) x
 end subroutine get_command_line_arg
