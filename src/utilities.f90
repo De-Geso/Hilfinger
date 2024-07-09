@@ -13,7 +13,8 @@ pure function percent_difference (a, b) result (x)
 	x = 100._dp * abs(a-b) / ((a+b)/2)
 end function percent_difference
 
-subroutine get_command_line_arg(x)
+subroutine get_command_line_arg(x, i)
+	integer, intent(in) :: i
 	real(dp), intent(out) :: x
 	character(len=32) :: arg
 	

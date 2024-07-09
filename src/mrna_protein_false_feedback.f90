@@ -26,8 +26,8 @@ real(dp), parameter :: maxlag = 5._dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 
-! Fake power of m dependence. This should be received as a command line argument
-real(dp) :: l = 1._dp
+! Fake power of m dependence. This should be received as a command line argument. Default is 1.
+real(dp) :: l(2) = [1._dp, 1._dp]
 
 ! Variables ============================================================
 ! Time
@@ -62,7 +62,8 @@ call random_seed(size=nseed)
 allocate(rseed(nseed))
 call random_seed(get=rseed)
 
-call get_command_line_arg(l)
+call get_command_line_arg(l(1), 1)
+call get_command_line_arg(l(2), 2)
 
 ! Randomize variables when testing, if we so choose.
 ! call random_uniform(roll, -1._dp, 1._dp)
@@ -91,11 +92,11 @@ do while (minval(nevents) < event_min)
 	twindow(:nwindow-1) = twindow(2:nwindow)
 	twindow(nwindow) = t
 	
-	! Track the real rate, h
+	! Track the real rates, Pbirth, Pdeath
 	Rwindow(:nwindow-1) = Rwindow(2:nwindow)
-	Rwindow(nwindow) = h(real(mp,dp))
+	Rwindow(nwindow) = Pbirth(real(mp,dp))
 	
-	! Track the fake rate, m^l
+	! Track the fake rates, m^l1, p^l2/tau_p
 	fake_xwindow(:nwindow-1) = fake_xwindow(2:nwindow)
 	fake_xwindow(nwindow) = g(mp(1), l)
 	
@@ -197,7 +198,7 @@ subroutine simulation_moments(pcond, mean, meanR, cov, fake_mean)
 	do i = 1, abund_max
 	do j = 1, abund_max
 		meanR(1) = meanR(1) + pcond(i,j)*R([x(i),x(j)])
-		meanR(2) = meanR(2) + pcond(i,j)*h([x(i),x(j)])
+		meanR(2) = meanR(2) + pcond(i,j)*Pbirth([x(i),x(j)])
 		fake_mean = fake_mean + pcond(i,j)*g(int(x(i)), l)
 	end do
 	end do
@@ -241,7 +242,7 @@ subroutine theory_moments(pcond, mean, cov)
 	do i = 1, abund_max
 	do j = 1, abund_max
 		meanR(1) = meanR(1) + pcond(i,j)*R([x(i),x(j)])
-		meanR(2) = meanR(2) + pcond(i,j)*h([x(i),x(j)])
+		meanR(2) = meanR(2) + pcond(i,j)*Pbirth([x(i),x(j)])
 	end do
 	end do
 	
@@ -353,12 +354,14 @@ end subroutine
 
 pure function update_propensity(x) result(prop)
 ! Updates propensities depending on the state of the system
+! LAMBDA AND ALPHA LIVE IN R AND Pbirth RESPECTIVELY.
+! tau(2) lives in Pdeath
 	integer, intent(in) :: x(2)
 	real(dp) :: prop(4)
-	prop(1) = 1._dp * lmbda * R(real(x,dp))	! Make mRNA
+	prop(1) = 1._dp * R(real(x,dp))	! Make mRNA
 	prop(2) = 1._dp * x(1)/tau(1)	! Degrade mRNA
-	prop(3) = 1._dp * alpha * h(real(x,dp))	! Make protein
-	prop(4) = 1._dp * x(2)/tau(2)	! Degrade protein
+	prop(3) = 1._dp * Pbirth(real(x,dp))	! Make protein
+	prop(4) = 1._dp * Pdeath(real(x,dp))	! Degrade protein
 end function
 
 
@@ -371,14 +374,27 @@ pure function g(x, l) result(f)
 end function
 
 
-pure function h(x) result(f)
+pure function Pbirth(x) result(f)
 ! Production function for protein.
 	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-		f = 1._dp * x(1) * x(1)
-		! f = 1._dp
+		f = 1._dp * x(1)**1
 	end associate
+	! Don't forget to multiply by alpha!
+	f = alpha * f
+end function
+
+
+pure function Pdeath(x) result(f)
+! Destruction function for protein.
+	real(dp), intent(in) :: x(2)
+	real(dp) :: f
+	associate(m => x(1), p => x(2))
+		f = 1._dp * x(2)**1
+	end associate
+	! Don't forget to multiply by alpha!
+	f = f / tau(2)
 end function
 
 
@@ -389,6 +405,8 @@ pure function R(x) result(f)
 	associate(m => x(1), p => x(2))
 	f = 1._dp * hill(p)
 	end associate
+	! Don't forget to multiply by lambda!
+	f = lmbda * f
 end function
 
 

@@ -116,16 +116,16 @@ corr_mean = corr_mean / tcorr
 do j = 1, 4
 	do i = 1, ncorr
 		! Combine the variances and means into the correlation (no longer normalized)
-		corr(i,j) = (corr_mean2(i,j) - corr_mean(1,i,j)*corr_mean(2,1,j)) &
-				/ (corr_mean2(1,j)-corr_mean(1,i,j)*corr_mean(2,1,j))
+		corr(i,j) = (corr_mean2(i,j) - corr_mean(1,i,j)*corr_mean(2,1,j))
+		!		/ (corr_mean2(1,j)-corr_mean(1,i,j)*corr_mean(2,1,j))
 	end do
 end do
 dcorr = -1._dp/tau(2) * (corr(:,4) - corr(:,3)*cov(2,1)/cov(2,2))
 
 call dump()
 
-contains
 
+contains
 
 
 subroutine simulation_moments(pcond, mean, meanR, cov)
@@ -303,11 +303,12 @@ end subroutine
 
 pure function update_propensity(x) result(prop)
 ! Updates propensities depending on the state of the system
+! LAMBDA LIVES IN R.
 	integer, intent(in) :: x(2)
 	real(dp) :: prop(4)
-	prop(1) = 1._dp * lmbda * R(real(x,dp))	! Make mRNA
+	prop(1) = 1._dp * R(real(x,dp))	! Make mRNA
 	prop(2) = 1._dp * x(1)/tau(1)	! Degrade mRNA
-	prop(3) = 1._dp * alpha*x(1)	! Make protein
+	prop(3) = 1._dp * alpha * x(1)	! Make protein
 	prop(4) = 1._dp * x(2)/tau(2)	! Degrade protein
 end function
 
@@ -318,7 +319,8 @@ pure function R(x) result(f)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
 	f = 1._dp * hill(p)
-	! f = 1._dp * lmbda
+	! Multiply by lambda
+	f = lmbda * f
 	end associate
 end function
 
@@ -377,7 +379,7 @@ subroutine dump()
 	! Correlations from simulation
 	open(newunit=io, file=fname, action='write')
 	call write_metadata_sim(io, &
-		"mRNA-protein system simulation normalized correlations and derivative of App from correlation relations. Derivative is also normalized by covariance.", &
+		"Simulation unnormalized correlations and derivative of App from correlation relations.", &
 		"Time, Amm, Apm, Amp, App, dApp")
 
 	do i = 1, ncorr
