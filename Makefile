@@ -17,7 +17,7 @@ BINDIR:= bin/
 
 PROGS := mrna_gene.f90 \
 	mrna_protein_feedback.f90 \
-	mrna_protein_false_feedback.f90
+	mrna_protein_false_rates.f90
 MODS := kind_parameters.f90 \
 	init_mrna_gene.f90 \
 	mrna_protein_system_parameters.f90 \
@@ -34,7 +34,7 @@ PROGOBJS := $(addsuffix .o, $(PROGSRCS))
 # Declare all public targets
 .PHONY: all clean
 
-all: mrna_gene mrna_protein_feedback mrna_protein_false_feedback
+all: mrna_gene mrna_protein_feedback mrna_protein_false_rates
 
 $(MODOBJS): %.o: %
 	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
@@ -48,7 +48,7 @@ mrna_gene: $(MODOBJS) src/mrna_gene.f90.o
 mrna_protein_feedback: $(MODOBJS) src/mrna_protein_feedback.f90.o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-mrna_protein_false_feedback: $(MODOBJS) src/mrna_protein_false_feedback.f90.o
+mrna_protein_false_rates: $(MODOBJS) src/mrna_protein_false_rates.f90.o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 
@@ -59,7 +59,7 @@ src/mrna_gene.f90.o: src/kind_parameters.f90.o src/init_mrna_gene.f90.o src/mrna
 
 src/mrna_protein_feedback.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
 
-src/mrna_protein_false_feedback.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
+src/mrna_protein_false_rates.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
 
 # Modules
 src/kind_parameters.f90:
@@ -81,12 +81,12 @@ run_mrna_protein_feedback: mrna_protein_feedback
 	date
 	./mrna_protein_feedback
 
-run_mrna_protein_false_feedback: mrna_protein_false_feedback
+run_mrna_protein_false_rates: mrna_protein_false_rates
 	date
 	@if [ -z "$(l1)" ] || [ -z "$(l2)" ]; then \
-		echo "Usage: make run_mrna_protein_false_feedback l1=<value> l2=<value>"; \
+		echo "Usage: make run_mrna_protein_false_rates l1=<value> l2=<value>"; \
 	else \
-		./mrna_protein_false_feedback $(l1) $(l2); \
+		./mrna_protein_false_rates $(l1) $(l2); \
 	fi
 
 # rebuild all object files in case this Makefile changes
