@@ -13,7 +13,7 @@ implicit none
 ! Program Hyperparameters ==============================================
 real(dp), parameter :: eps = 1E-12_dp
 ! Number of events before stopping
-integer, parameter :: event_min = 10**6
+integer, parameter :: event_min = 10**5
 ! Maximum abundance. Program will exit if exceeded.
 integer, parameter :: abund_max = 2**9
 
@@ -112,7 +112,7 @@ do while (minval(nevents) < event_min)
 !	Rwindow(:, :nwindow-1) = Rwindow(:, 2:nwindow)
 !	Rwindow(:, nwindow) = [Pbirth(real(mp,dp)), Pdecay(real(mp,dp))]
 	
-	! Track the fake rates, m^l1, p^l2/tau_p
+	! Track the fake rates, m^l1, p^l2*beta_p
 	fake_Rwindow(:, :nwindow-1) = fake_Rwindow(:, 2:nwindow)
 	fake_Rwindow(:, nwindow) = [fakePbirth(real(mp,dp), l), fakePdecay(real(mp,dp), l)]
 	
@@ -267,11 +267,11 @@ subroutine theory_moments(pcond, nevents, mean, eta)
 	! Mean rate
 	! There isn't really an analytic mean rate except for the mrna, but we need something for the etas
 	meanR = nevents(2:)/t
-	meanR(1) = lmbda
+	meanR(1) = mean(1)*beta(1)
 
 	! Mean abundances
 	! Depending on the ells, there may not be an analytic solution here
-	mean(1) = 1._dp * burst(1)*lmbda/beta(1)
+	mean(1) = 1._dp * burst(1)*meanR(1)
 	if (abs(ell(1) - 1._dp) .lt. eps .and. abs(ell(2) - 1._dp) .lt. eps) then
 		mean(2) = 1._dp * burst(2)*alpha*mean(1)/beta(2)
 	end if
@@ -307,7 +307,7 @@ subroutine update_correlation(mean2, meanx, meany, y, x, tvec, dt)
 		write(*,*) "Error in update_corr: Required lag larger than recorded lag. Increase nwindow."
 		write(*,*) "Recorded time lag: ", tvec(nwindow)-tvec(1)
 		write(*,*) "Required time lag: ", maxlag
-		write(*,*) "lmbda=", lmbda, "alpha=", alpha, "Tau=", tau
+		write(*,*) "lmbda=", lmbda, "alpha=", alpha, "Beta=", beta
 		call exit()
 	end if
 	
@@ -382,11 +382,10 @@ end subroutine
 pure function update_propensity(x) result(prop)
 ! Updates propensities depending on the state of the system
 ! LAMBDA AND ALPHA LIVE IN R AND Pbirth RESPECTIVELY.
-! tau(2) lives in Pdecay
 	integer, intent(in) :: x(2)
 	real(dp) :: prop(4)
 	prop(1) = 1._dp * R(real(x,dp))	! Make mRNA
-	prop(2) = 1._dp * x(1)/tau(1)	! Degrade mRNA
+	prop(2) = 1._dp * x(1)*beta(1)	! Degrade mRNA
 	prop(3) = 1._dp * Pbirth(real(x,dp))	! Make protein
 	prop(4) = 1._dp * Pdecay(real(x,dp))	! Degrade protein
 end function
@@ -413,8 +412,8 @@ pure function fakePdecay(x, l) result(f)
 	associate(m => x(1), p => x(2))
 		f = 1._dp * p**l(2)
 	end associate
-	! Don't forget to divide by tau_p!
-	f = f / tau(2)
+	! Don't forget death rate
+	f = f * beta(2)
 end function
 
 
@@ -437,8 +436,8 @@ pure function Pdecay(x) result(f)
 	associate(m => x(1), p => x(2))
 		f = 1._dp * x(2)**ell(2)
 	end associate
-	! Don't forget to multiply by alpha!
-	f = f / tau(2)
+	! Don't forget to multiply decay rate!
+	f = f * beta(2)
 end function
 
 
@@ -447,8 +446,8 @@ pure function R(x) result(f)
 	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	! f = 1._dp * hill(p)
-	f = 1._dp
+	f = 1._dp * hill(p)
+	! f = 1._dp
 	end associate
 	! Don't forget to multiply by lambda!
 	f = lmbda * f
@@ -511,7 +510,8 @@ subroutine dump()
 	! Write metadata
 	write(io,*) "# Program Metadata"
 	write(io,*) "# Program: mrna_protein_false_rates.f90"
-	write(io,*) "# Description: mRNA-protein system simulation unnormalized correlations and derivative of App from correlation relations."
+	write(io,*) "# Description: &
+		mRNA-protein system simulation unnormalized correlations and derivative of App from correlation relations."
 	write(io,*) "# Creation date: ", fdate()
 	write(io,*) "# Seed: ", rseed
 	write(io,*) "# Min events: ", event_min

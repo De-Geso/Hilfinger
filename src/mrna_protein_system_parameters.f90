@@ -9,9 +9,9 @@ public
 ! Size of burst for [x0, x1]
 integer, parameter, dimension(2) :: burst = [1, 1]
 ! mRNA production rate
-real(dp) :: lmbda = 1._dp
+real(dp) :: lmbda = 3._dp
 ! Protein production rate
-real(dp) :: alpha = 2._dp
+real(dp) :: alpha = 3._dp
 ! Lifetimes. Can always leave tau_m=1
 real(dp), dimension(2) :: tau = [1._dp, 1._dp]
 ! Decay rates. Can always leave beta_m=1
@@ -25,7 +25,7 @@ integer, parameter, dimension(2,4) :: abund_update = &
 			0, burst(2), &
 			0, -1/), shape(abund_update))
 ! Hill function parameters
-real(dp) :: k = 0.1_dp
+real(dp) :: k = 1._dp
 real(dp) :: n = 1._dp
 
 end module
