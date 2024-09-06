@@ -18,11 +18,11 @@ integer, parameter :: event_min = 10**5
 integer, parameter :: abund_max = 2**9
 
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
-integer, parameter :: nwindow = 2**4
+integer, parameter :: nwindow = 2**7
 ! Number of points in correlation vector
 integer, parameter :: ncorr = 2**6
 ! Maximum time lag for correlation vector
-real(dp), parameter :: maxlag = 0.01_dp
+real(dp), parameter :: maxlag = 4._dp
 ! Time step for correlation
 real(dp), parameter :: corr_tstep = 1._dp*maxlag/(ncorr-1)
 
@@ -287,7 +287,7 @@ subroutine theory_moments(pcond, nevents, mean, eta)
 	end do
 	
 	eta(1,1) = eta(1,1)/(mean(1)*meanR(1)) + s(1)/mean(1)
-	eta(1,2) = tau(1)/sum(tau) * eta(1,1) + tau(2)/sum(tau) * eta(1,2)/(mean(2)*meanR(1))
+	eta(1,2) = beta(2)/sum(beta) * eta(1,1) + beta(1)/sum(beta) * eta(1,2)/(mean(2)*meanR(1))
 	eta(2,1) = eta(1,2)
 	eta(2,2) = s(2)/mean(2) + eta(1,2)
 end subroutine
@@ -446,8 +446,8 @@ pure function R(x) result(f)
 	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	f = 1._dp * hill(p)
 	! f = 1._dp
+	f = 1._dp * hill(p)
 	end associate
 	! Don't forget to multiply by lambda!
 	f = lmbda * f
@@ -525,14 +525,12 @@ subroutine dump()
 	write(io,*) "# alpha: ", alpha
 	write(io,*) "# beta_m: ", beta(1)
 	write(io,*) "# beta_p: ", beta(2)
-!	write(io,*) "# k: ", k
-!	write(io,*) "# n: ", n
+	write(io,*) "# k: ", k
+	write(io,*) "# n: ", n
 	write(io,*) "# ell1: ", ell(1)
 	write(io,*) "# ell2: ", ell(2)
 	write(io,*) "# l1: ", l(1)
 	write(io,*) "# l2: ", l(2)
-!	write(io,*) "# fakeRpbavg: ", fake_mean(1)
-!	write(io,*) "# fakeRpdavg: ", fake_mean(2)
 	write(io,*) "# mavg: ", mean(1)
 	write(io,*) "# pavg: ", mean(2)
 	write(io,*) "# Rmavg: ", meanR(1)

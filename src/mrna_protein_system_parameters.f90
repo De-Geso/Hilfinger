@@ -25,7 +25,9 @@ integer, parameter, dimension(2,4) :: abund_update = &
 			0, burst(2), &
 			0, -1/), shape(abund_update))
 ! Hill function parameters
+! Coefficient
 real(dp) :: k = 1._dp
+! Power
 real(dp) :: n = 1._dp
 
 end module
