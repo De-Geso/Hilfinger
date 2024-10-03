@@ -13,12 +13,12 @@ implicit none
 ! Program Hyperparameters ==============================================
 real(dp), parameter :: eps = 1E-12_dp
 ! Number of events before stopping
-integer, parameter :: event_min = 10**5
+integer, parameter :: event_min = 10**6
 ! Maximum abundance. Program will exit if exceeded.
 integer, parameter :: abund_max = 2**9
 
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
-integer, parameter :: nwindow = 2**7
+integer, parameter :: nwindow = 400
 ! Number of points in correlation vector
 integer, parameter :: ncorr = 2**6
 ! Maximum time lag for correlation vector
@@ -79,8 +79,8 @@ call random_seed(get=rseed)
 ! beta(2) = 10._dp**roll
 
 ! Start values close to their means according to flux balance.
-mp(1) = int(lmbda/beta(1))
-mp(2) = int((alpha*mp(1)**ell(1)/beta(2))**(1.0/ell(2)))
+! mp(1) = int(lmbda/beta(1))
+! mp(2) = int((alpha*mp(1)**ell(1)/beta(2))**(1.0/ell(2)))
 
 do while (minval(nevents) < event_min)
 	! Exit the program if we exceed maximum abundance.
@@ -134,16 +134,7 @@ do while (minval(nevents) < event_min)
 		!$omp section
 		call update_correlation(corr_mean2(:,4), corr_mean(1,:,4), corr_mean(2,:,4), &
 			xwindow(2,:), xwindow(2,:), twindow, tstep)
-		
-!		!$omp section
-!		! ARpbirth,p for the real rate.
-!		call update_correlation(corr_mean2(:,5), corr_mean(1,:,5), corr_mean(2,:,5), &
-!			Rwindow(1,:), xwindow(2,:), twindow, tstep)
-!		!$omp section
-!		! ARpdecay,p for the real rate.
-!		call update_correlation(corr_mean2(:,6), corr_mean(1,:,6), corr_mean(2,:,6), &
-!			Rwindow(2,:), xwindow(2,:), twindow, tstep)
-		
+		! Autocovariances of rates
 		!$omp section
 		! ARpbirth,p for the fake rate.
 		call update_correlation(fake_corr_mean2(:,1), fake_corr_mean(1,:,1), fake_corr_mean(2,:,1), &
@@ -446,8 +437,8 @@ pure function R(x) result(f)
 	real(dp), intent(in) :: x(2)
 	real(dp) :: f
 	associate(m => x(1), p => x(2))
-	! f = 1._dp
-	f = 1._dp * hill(p)
+	f = 1._dp
+	! f = 1._dp * hill(p)
 	end associate
 	! Don't forget to multiply by lambda!
 	f = lmbda * f
@@ -504,6 +495,9 @@ subroutine dump()
 		write (fname, '(a, a, i0, a)') path, prefix, fnum, suffix
 		inquire(file=fname, exist=ex)
 	end do
+	open(newunit=io, file=fname, action='write')
+	write(io,*)""
+	close(io)
 	write(*,*) "File output at: ", fname
 	
 	open(newunit=io, file=fname, action='write')
