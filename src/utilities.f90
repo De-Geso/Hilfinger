@@ -24,6 +24,22 @@ subroutine get_command_line_arg(x, i)
 	read(arg, *) x
 end subroutine get_command_line_arg
 
+subroutine generate_ISO_filename(path, prefix, suffix, filename)
+! Generates an ISO 8601 compliant filename suffix. Used to create
+! unique filenames up to milliseconds.
+	character(len=*), intent(in) :: path, prefix, suffix
+	character(len=*), intent(out) :: filename
+	character(len=32) :: datetime
+	integer, dimension(8) :: values  ! Array to store date and time components
+	
+	call date_and_time(VALUES=values)
+	! Format date and time to ISO 8601 standards.
+	write(datetime, '(I4.4, I2.2, I2.2, "T", I2.2, I2.2, I2.2, ".", I3.3)') &
+		values(1), values(2), values(3), values(5), values(6), values(7), values(8)
+	! Create filename
+	filename = trim(adjustl(path)) // trim(adjustl(prefix)) // trim(adjustl(datetime)) // trim(adjustl(suffix))
+end subroutine
+
 function linspace(start,end,num,endpoint,step) result(samples)
 	! PARAMETERS
 	real(dp), intent(in) :: start 
