@@ -13,7 +13,7 @@ implicit none
 ! Program Hyperparameters ==============================================
 real(dp), parameter :: eps = 1E-12_dp
 ! Number of events before stopping
-integer, parameter :: event_min = 10**5
+integer, parameter :: event_min = 10**4
 ! Maximum abundance. Program will exit if exceeded.
 integer, parameter :: abund_max = 2**9
 ! Number of abundance updates to remember for correlation. Reducing this gives big time savings.
