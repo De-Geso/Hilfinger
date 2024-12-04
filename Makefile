@@ -17,12 +17,14 @@ BINDIR:= bin/
 
 PROGS := mrna_gene.f90 \
 	mrna_protein_feedback.f90 \
-	mrna_protein_false_rates.f90
+	mrna_protein_false_rates.f90 \
+	single_path_3D_discrete.f90
 MODS := kind_parameters.f90 \
 	init_mrna_gene.f90 \
 	mrna_protein_system_parameters.f90 \
 	randf.f90 \
-	utilities.f90
+	utilities.f90 \
+	stochastics.f90 \
 
 # Create lists of the build artefacts in this project
 MODSRCS := $(addprefix $(PATHIN), $(MODS))
@@ -34,13 +36,17 @@ PROGOBJS := $(addsuffix .o, $(PROGSRCS))
 # Declare all public targets
 .PHONY: all clean
 
-all: mrna_protein_false_rates # mrna_gene # mrna_protein_feedback
+all: mrna_protein_false_rates single_path_3D_discrete # mrna_gene # mrna_protein_feedback
 
 $(MODOBJS): %.o: %
 	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
 
 $(PROGOBJS): %.o: %
 	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
+
+
+single_path_3D_discrete: $(MODOBJS) src/single_path_3D_discrete.f90.o
+	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 mrna_gene: $(MODOBJS) src/mrna_gene.f90.o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
@@ -55,6 +61,8 @@ mrna_protein_false_rates: $(MODOBJS) src/mrna_protein_false_rates.f90.o
 
 # Define dependencies between object files
 # Programs
+src/single_path_3D_discrete.f90.o: src/kind_parameters.f90.o src/stochastics.f90.o src/randf.f90.o
+
 src/mrna_gene.f90.o: src/kind_parameters.f90.o src/init_mrna_gene.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
 
 src/mrna_protein_feedback.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
@@ -63,6 +71,8 @@ src/mrna_protein_false_rates.f90.o: src/kind_parameters.f90.o src/mrna_protein_s
 
 # Modules
 src/kind_parameters.f90:
+
+src/stochastics.f90: src/kind_parameters.f90.o
 
 src/mrna_protein_system_parameters.f90.o: src/kind_parameters.f90.o
 

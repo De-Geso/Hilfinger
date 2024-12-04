@@ -1,4 +1,4 @@
-module gillespie_module
+module stochastics
 use kind_parameters
 use randf
 implicit none

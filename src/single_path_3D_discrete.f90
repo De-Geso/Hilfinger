@@ -1,7 +1,7 @@
 program single_path_3D
 
 use kind_parameters
-use gillespie_module
+use stochastics
 use randf
 use utilities
 
