@@ -1,10 +1,52 @@
 ! Generic utilities and functions.
 module utilities
+use ieee_arithmetic
 use kind_parameters
 implicit none
 public
 
+real(dp), parameter :: utilities_eps = 1E-14
+
+
 contains
+
+
+function relative_change(x, y, method) result(change)
+! Calculate the relative change between two numbers using specified
+! measure. y-x
+	real(dp), intent(in) :: x, y
+	character(len=*), intent(in) :: method
+	real(dp) :: change, f
+	
+	! Unequal x and y
+	select case (trim(method))
+	case ("classical")
+		f = 1._dp * x
+	case ("logarithmic")
+		f = 1._dp * (y-x) / log(y/x)
+	case default
+		! Unrecognized case
+		write(*,*) "ERROR: unknown method. Options are 'classical', 'logarithmic'"
+		change = ieee_value(change, ieee_quiet_nan)  ! Return NaN
+		return
+	end select
+	
+	! Equal x and y
+	if (y-x .eq. 0._dp) then
+		change = 0._dp
+	! Throw error if we are dividing by zero
+	else if (f .eq. 0._dp) then
+		write(*,*) "ERROR: division by zero in utilities/arithmetic_mean_change!"
+		change = ieee_value(change, ieee_quiet_nan)  ! Return NaN
+	! No exceptions
+	else
+		change = 1._dp * ( y-x ) / f
+	end if
+end function relative_change
+
+
+! Functions below this line might be shitty ============================
+
 
 pure function percent_difference (a, b) result (x)
 ! Calculates the percent difference between two real(8) numbers.

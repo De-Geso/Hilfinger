@@ -34,7 +34,7 @@ PROGOBJS := $(addsuffix .o, $(PROGSRCS))
 # Declare all public targets
 .PHONY: all clean
 
-all: mrna_gene mrna_protein_feedback mrna_protein_false_rates
+all: mrna_protein_false_rates # mrna_gene # mrna_protein_feedback
 
 $(MODOBJS): %.o: %
 	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
