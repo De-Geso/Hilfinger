@@ -9,15 +9,15 @@ implicit none
 
 ! Program hyper parameters =============================================
 ! Output filename
-character(len=*), parameter :: filename = "3D_discrete_oscillating"
+character(len=*), parameter :: filename = "3D_discrete_noise_enhancing"
 ! Epsilon
 real(dp), parameter :: eps = 1E-15
 ! Number of events of each reaction before stopping.
 integer, parameter :: event_min = 10**6
 ! Maximum abundance in each direction
-integer, parameter, dimension(3) :: abund_max = [2**9, 2**7, 2**7]
+integer, parameter, dimension(3) :: abund_max = [2**5, 2**8, 2**7]
 ! Maximum time lag for autocovariance.
-real(dp), parameter :: maxlag = 15._dp
+real(dp), parameter :: maxlag = 10._dp
 ! Discretization of time
 real(dp), parameter :: tdisc = 0.1_dp
 ! Number of points in autocovariance.
@@ -26,14 +26,14 @@ integer, parameter :: nacov = ceiling(maxlag/tdisc) + 1
 
 ! System parameters ====================================================
 ! Production rates
-real(dp), parameter, dimension(3) :: lmbda = [500._dp, 80._dp, 80._dp]
+real(dp), parameter, dimension(3) :: lmbda = [25._dp, 25._dp, 80._dp]
 ! Decay rates
 real(dp), parameter, dimension(3) :: beta = [1._dp, 1._dp, 1._dp]
 ! Hill function parameters
-real(dp), parameter, dimension(3) :: k = [0.1_dp, 100._dp, 40._dp]
-real(dp), parameter, dimension(3) :: n = [10._dp, 1._dp, 2._dp]
+real(dp), parameter, dimension(3) :: k = [0._dp, 50._dp, 40._dp]
+real(dp), parameter, dimension(3) :: n = [0._dp, 4._dp, 2._dp]
 ! Constant offset
-real(dp), parameter, dimension(3) :: c = [0._dp, 0._dp, 0._dp]
+real(dp), parameter, dimension(3) :: c = [0._dp, 8._dp, 0._dp]
 ! Abundance update matrix.
 integer, parameter, dimension(3,6) :: abund_update = &
 	reshape((/1, 0, 0, &
@@ -59,7 +59,7 @@ real(dp), dimension(abund_max(1), abund_max(2), abund_max(3)) :: pcond = 0._dp
 real(dp) :: meanX(3), meanR(6), eta(3,3)
 ! Gillespie
 real(dp) :: propensity(6), roll
-integer :: x(3)=0, xlast(3), maxX(3) = 0, event_count(6) = 0, event
+integer :: x(3)=3, xlast(3), maxX(3) = 0, event_count(6) = 0, event
 ! Counters
 integer :: i, nseed, tcount=0
 integer, allocatable :: rseed(:)
@@ -100,6 +100,7 @@ do while (minval(event_count) < event_min)
 	t = t + tstep
 
 	if (t .ge. (tlast + tdisc)) then
+!		write(*,*) t, x
 		! Online correlation calculation
 		! Track the abundances and time in a window for correlations.
 		do i = 1, floor((t-tlast)/tdisc)
@@ -141,6 +142,7 @@ do while (minval(event_count) < event_min)
 	! Update state of system in preparation for next step.
 	! Update probability
 	pcond(x(1)+1, x(2)+1, x(3)+1) = pcond(x(1)+1, x(2)+1, x(3)+1) + tstep
+!	pcond(x(1)+1, x(2)+1, 1) = pcond(x(1)+1, x(2)+1, 1) + tstep
 	! Update counter
 	event_count(event) = event_count(event) + 1
 	! Update abundances according to what happened
@@ -186,17 +188,29 @@ pure function production_rates(x, lmbda, k, n, c) result(rate)
 	real(dp), intent(in) :: lmbda(3), k(3), n(3), c(3)
 	real(dp) :: rate(3)
 	
+	! Testing
+!	rate(1) = 1._dp * lmbda(1)
+!	rate(2) = 1._dp * lmbda(2) * x(1)
+!	rate(3) = 1._dp * lmbda(3) * x(2)
+	
 	! PLOS R3+
 	rate(3) = 1._dp * lmbda(3) * hill_pos(x(2), k(3), n(3))
-
-	! Simple testing
-	! rate(1) = 1._dp * lmbda(1)
-	! rate(2) = 1._dp * lmbda(2) * x(1)
-	! rate(3) = 1._dp * lmbda(3) * x(2)
+	
+	! Bistable
+!	rate(1) = 1._dp * lmbda(1) * hill_pos(x(2), k(1), n(1)) + c(1)
+!	rate(2) = 1._dp * x(1)
 	
 	! Oscillating
-	rate(1) = 1._dp * lmbda(1) * hill_neg(x(3), k(1), n(1))
-	rate(2) = 1._dp * lmbda(2) * hill_pos(x(1), k(2), n(2))
+!	rate(1) = 1._dp * lmbda(1) * hill_neg(x(3), k(1), n(1))
+!	rate(2) = 1._dp * lmbda(2) * hill_pos(x(1), k(2), n(2))
+
+	! Noise Controlling
+!	rate(1) = 1._dp * lmbda(1) * x(3)
+!	rate(2) = 1._dp * lmbda(2) * hill_neg(x(1), k(2), n(2))
+
+	! Noise Enhancing
+	rate(1) = 5._dp
+	rate(2) = 1._dp * lmbda(2) * hill_pos(x(3), k(2), n(2)) + c(2)*x(1)
 end function
 
 
