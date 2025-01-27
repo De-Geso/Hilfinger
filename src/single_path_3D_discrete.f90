@@ -9,15 +9,15 @@ implicit none
 
 ! Program hyper parameters =============================================
 ! Output filename
-character(len=*), parameter :: filename = "3D_discrete_noise_enhancing"
+character(len=*), parameter :: filename = "3D_discrete_noise_controlling"
 ! Epsilon
 real(dp), parameter :: eps = 1E-15
 ! Number of events of each reaction before stopping.
-integer, parameter :: event_min = 10**6
+integer, parameter :: event_min = 10**3
 ! Maximum abundance in each direction
-integer, parameter, dimension(3) :: abund_max = [2**5, 2**8, 2**7]
+integer, parameter, dimension(3) :: abund_max = [2**13, 2**7, 2**7]
 ! Maximum time lag for autocovariance.
-real(dp), parameter :: maxlag = 10._dp
+real(dp), parameter :: maxlag = 5._dp
 ! Discretization of time
 real(dp), parameter :: tdisc = 0.1_dp
 ! Number of points in autocovariance.
@@ -26,14 +26,14 @@ integer, parameter :: nacov = ceiling(maxlag/tdisc) + 1
 
 ! System parameters ====================================================
 ! Production rates
-real(dp), parameter, dimension(3) :: lmbda = [25._dp, 25._dp, 80._dp]
+real(dp), parameter, dimension(3) :: lmbda = [50._dp, 3000._dp, 80._dp]
 ! Decay rates
-real(dp), parameter, dimension(3) :: beta = [1._dp, 1._dp, 1._dp]
+real(dp), parameter, dimension(3) :: beta = [1._dp, 0.1_dp, 1._dp]
 ! Hill function parameters
-real(dp), parameter, dimension(3) :: k = [0._dp, 50._dp, 40._dp]
-real(dp), parameter, dimension(3) :: n = [0._dp, 4._dp, 2._dp]
+real(dp), parameter, dimension(3) :: k = [0._dp, 10._dp, 40._dp]
+real(dp), parameter, dimension(3) :: n = [0._dp, 10._dp, 2._dp]
 ! Constant offset
-real(dp), parameter, dimension(3) :: c = [0._dp, 8._dp, 0._dp]
+real(dp), parameter, dimension(3) :: c = [0._dp, 0._dp, 0._dp]
 ! Abundance update matrix.
 integer, parameter, dimension(3,6) :: abund_update = &
 	reshape((/1, 0, 0, &
@@ -90,7 +90,7 @@ do while (minval(event_count) < event_min)
 		end if
 	end do
 	
-!	write(1,*) t, x
+	write(1,*) t, x
 
 	! Update the propensity before taking a Gillespie step
 	call update_propensity(propensity, x, lmbda, k, n, c, beta)
@@ -205,12 +205,12 @@ pure function production_rates(x, lmbda, k, n, c) result(rate)
 !	rate(2) = 1._dp * lmbda(2) * hill_pos(x(1), k(2), n(2))
 
 	! Noise Controlling
-!	rate(1) = 1._dp * lmbda(1) * x(3)
-!	rate(2) = 1._dp * lmbda(2) * hill_neg(x(1), k(2), n(2))
+	rate(1) = 1._dp * lmbda(1) * x(3)
+	rate(2) = 1._dp * lmbda(2) * hill_neg(x(1), k(2), n(2))
 
 	! Noise Enhancing
-	rate(1) = 5._dp
-	rate(2) = 1._dp * lmbda(2) * hill_pos(x(3), k(2), n(2)) + c(2)*x(1)
+!	rate(1) = 5._dp
+!	rate(2) = 1._dp * lmbda(2) * hill_pos(x(3), k(2), n(2)) + c(2)*x(1)
 end function
 
 
@@ -421,8 +421,8 @@ end subroutine
 
 subroutine dump_data()
 ! Output data to file
-	real(dp) t, x
-	integer :: i, io
+	real(dp) t, x, prob2(abund_max(2))
+	integer :: i, io, last_nonzero
 	character(len=256) :: fname, prefix
 	character(len=*), parameter :: directory = "data/", suffix = ".dat"
 	
@@ -479,8 +479,21 @@ subroutine dump_data()
 		t = (i-1)*tdisc
 		write(io,*) t, acov(:, i)
 	end do
-	
 	close(io)
+	
+	prob2 = sum(sum(pcond, dim=3), dim=1)
+	
+	do i = abund_max(2), 1, -1
+		if (prob2(i) .gt. eps) then
+			last_nonzero = i+1
+			exit
+		end if
+	end do
+	
+	do i = 1, last_nonzero
+		write(2,*) i-1, prob2(i)
+	end do
+	
 end subroutine
 
 end program
