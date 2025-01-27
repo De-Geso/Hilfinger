@@ -18,13 +18,16 @@ BINDIR:= bin/
 PROGS := mrna_gene.f90 \
 	mrna_protein_feedback.f90 \
 	mrna_protein_false_rates.f90 \
-	single_path_3D_discrete.f90
+	single_path_3D_discrete.f90 \
+	simplex_cascade_2_discrete.f90
+
 MODS := kind_parameters.f90 \
 	init_mrna_gene.f90 \
 	mrna_protein_system_parameters.f90 \
 	randf.f90 \
 	utilities.f90 \
 	stochastics.f90 \
+	nr_minmax.f90
 
 # Create lists of the build artefacts in this project
 MODSRCS := $(addprefix $(PATHIN), $(MODS))
@@ -36,7 +39,7 @@ PROGOBJS := $(addsuffix .o, $(PROGSRCS))
 # Declare all public targets
 .PHONY: all clean
 
-all: mrna_protein_false_rates single_path_3D_discrete # mrna_gene # mrna_protein_feedback
+all: mrna_protein_false_rates single_path_3D_discrete simplex_cascade_2_discrete # mrna_gene # mrna_protein_feedback
 
 $(MODOBJS): %.o: %
 	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
@@ -57,6 +60,10 @@ mrna_protein_feedback: $(MODOBJS) src/mrna_protein_feedback.f90.o
 mrna_protein_false_rates: $(MODOBJS) src/mrna_protein_false_rates.f90.o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+simplex_cascade_2_discrete: $(MODOBJS) src/simplex_cascade_2_discrete.f90.o
+	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+
+
 
 
 # Define dependencies between object files
@@ -69,10 +76,12 @@ src/mrna_protein_feedback.f90.o: src/kind_parameters.f90.o src/mrna_protein_syst
 
 src/mrna_protein_false_rates.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
 
-# Modules
-src/kind_parameters.f90:
+src/simplex_cascade_2_discrete.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o src/nr_minmax.f90.o
 
-src/stochastics.f90: src/kind_parameters.f90.o
+# Modules
+src/kind_parameters.f90.o:
+
+src/stochastics.f90.o: src/kind_parameters.f90.o
 
 src/mrna_protein_system_parameters.f90.o: src/kind_parameters.f90.o
 
@@ -81,6 +90,8 @@ src/init_mrna_gene.f90.o: src/kind_parameters.f90.o
 src/randf.f90.o: src/kind_parameters.f90.o
 
 src/utilities.f90.o: src/kind_parameters.f90.o
+
+src/nr_minmax.f90.o: src/kind_parameters.f90.o
 
 # Run commands
 run_mrna_gene: mrna_gene
