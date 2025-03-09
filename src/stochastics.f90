@@ -4,6 +4,18 @@ use randf
 implicit none
 public
 
+type :: OnlineCovariance
+	real(dp) :: total_time = 0._dp
+	real(dp) :: mean_x = 0._dp
+	real(dp) :: mean_y = 0._dp
+	real(dp) :: cov_xy = 0._dp
+	
+	contains
+	
+	procedure :: update => update_cov
+	procedure :: get_cov => get_covariance
+end type OnlineCovariance
+
 
 contains
 
@@ -125,6 +137,52 @@ subroutine update_discretized_autocovariance(mean2, meany, meanx, x, y, n, tstep
 		mean2(i) = 1._dp * (mean2(i) + x(n)*y(n-(i-1)) * tstep)
 	end do
 end subroutine
+
+
+subroutine update_cov(this, x, y, dt)
+	class(OnlineCovariance), intent(inout) :: this
+	real(dp), intent(in) :: x, y, dt
+	real(dp) :: dx, dy, w
+
+	if (dt <= 0._dp) return
+	
+	! Update total time
+	this%total_time = this%total_time + dt
+	
+	! Time-weighted mean updates
+	w = dt / this%total_time
+	dx = x - this%mean_x
+	dy = y - this%mean_y
+	this%mean_x = this%mean_x + w * dx
+	this%mean_y = this%mean_y + w * dy
+	
+	! Time-weighted covariance updates
+	this%cov_xy = this%cov_xy + dt * dx * (y - this%mean_y)
+end subroutine update_cov
+
+
+function get_covariance(this) result(cov)
+! Finalize covariance
+	class(OnlineCovariance), intent(in) :: this
+	real(dp) :: cov
+	
+	if (this%total_time > 0._dp) then
+		cov = this%cov_xy / (this%total_time)
+	else
+		cov = 0._dp
+	end if
+end function get_covariance
+
+
+pure function hill(x, k, n, c) result(f)
+! Hill function. n < 0 should give the negative hill function.
+	integer, intent(in) :: x
+	real(dp), intent(in) :: k, n, c
+	real(dp) :: f
+	real(dp), parameter :: eps = 1E-14
+	
+	f = 1._dp / (1. + (k/(x+eps))**n) + c
+end function
 
 
 end module

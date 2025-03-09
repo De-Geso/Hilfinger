@@ -64,8 +64,6 @@ subroutine amoeba(p, y, mp, np, ndim, ftol, funk, iter)
 		inhi = 1
 	end if
 	
-!	write(100,*) iter, p(ihi,:), y(ihi)
-
 	! by looping over the points in the simplex.
 	do i = 1, ndim + 1
 		if (y(i) .le. y(ilo)) ilo = i
@@ -76,10 +74,11 @@ subroutine amoeba(p, y, mp, np, ndim, ftol, funk, iter)
 			if (i .ne. ihi) inhi = i
 		end if
 	end do
-	
-	rtol = 2.*abs(y(ihi)-y(ilo)) / (abs(y(ihi))+abs(y(ilo))+TINY)
 
+	write(*,*) iter, p(1,:), p(2,:), p(3,:), y(ihi)
+	
 !	Compute the fractional range from highest to lowest and return if satisfactory.
+	rtol = 2.*abs(y(ihi)-y(ilo)) / (abs(y(ihi))+abs(y(ilo))+TINY)
 !	If returning, put best point and value in slot 1.
 	if (rtol .lt. ftol) then
 		swap = y(1)
@@ -139,6 +138,7 @@ subroutine amotry(res, p, y, psum, mp, np, ndim, funk, ihi, fac)
 	real(dp), intent(in) :: fac
 	integer, intent(in) :: ihi, mp, ndim, np
 	real(dp), intent(inout) :: p(mp,np), psum(np), y(mp)
+	real(dp), parameter :: TINY=1.e-8
 	procedure(funk_type) :: funk
 !	real :: funk
 !	external :: funk
@@ -157,7 +157,7 @@ subroutine amotry(res, p, y, psum, mp, np, ndim, funk, ihi, fac)
 !	Evaluate the function at the trial point.
 	ytry=funk(ptry)
 !	If it’s better than the highest, then replace the highest.
-	if (ytry.lt.y(ihi)) then
+	if (ytry .lt. y(ihi)) then
 		y(ihi)=ytry
 		do j=1, ndim
 			psum(j) = psum(j) - p(ihi,j) + ptry(j)

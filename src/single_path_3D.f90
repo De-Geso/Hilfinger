@@ -82,8 +82,6 @@ do while (minval(event_count) < event_min)
 			call exit()
 		end if
 	end do
-	
-	write(1,*) t, x
 
 	! Update the propensity before taking a Gillespie step
 	call update_propensity(propensity, x, lmbda, k, n, c, beta)
@@ -91,7 +89,6 @@ do while (minval(event_count) < event_min)
 	call gillespie_iter(tstep, event, propensity)
 	! Update time by adding how long we were in the previous state
 	t = t + tstep
-
 
 	! Online correlation calculation
 	! Track the abundances and time in a window for correlations.
@@ -125,8 +122,7 @@ do while (minval(event_count) < event_min)
 				guess_Rwindow(2,:), real(xwindow, dp), twindow, maxlag, nwindow, nacov, acov_tstep, tstep)
 		!$omp end sections
 		!$omp end parallel
-	end if
-	
+	end if	
 		
 	! Update state of system in preparation for next step.
 	! Update probability

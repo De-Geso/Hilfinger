@@ -19,7 +19,10 @@ PROGS := mrna_gene.f90 \
 	mrna_protein_feedback.f90 \
 	mrna_protein_false_rates.f90 \
 	single_path_3D_discrete.f90 \
-	simplex_cascade_2_discrete.f90
+	simplex_cascade_2_discrete.f90 \
+	simplex_cascade_3_discrete.f90 \
+	acov_discrete_cascade_2D.f90 \
+	acov_cascade_2D.f90
 
 MODS := kind_parameters.f90 \
 	init_mrna_gene.f90 \
@@ -39,7 +42,7 @@ PROGOBJS := $(addsuffix .o, $(PROGSRCS))
 # Declare all public targets
 .PHONY: all clean
 
-all: mrna_protein_false_rates single_path_3D_discrete simplex_cascade_2_discrete # mrna_gene # mrna_protein_feedback
+all: mrna_protein_false_rates single_path_3D_discrete simplex_cascade_2_discrete simplex_cascade_3_discrete acov_discrete_cascade_2D acov_cascade_2D# mrna_gene # mrna_protein_feedback
 
 $(MODOBJS): %.o: %
 	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
@@ -63,10 +66,16 @@ mrna_protein_false_rates: $(MODOBJS) src/mrna_protein_false_rates.f90.o
 simplex_cascade_2_discrete: $(MODOBJS) src/simplex_cascade_2_discrete.f90.o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+simplex_cascade_3_discrete: $(MODOBJS) src/simplex_cascade_3_discrete.f90.o
+	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+acov_discrete_cascade_2D: $(MODOBJS) src/acov_discrete_cascade_2D.f90.o
+	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
+acov_cascade_2D: $(MODOBJS) src/acov_cascade_2D.f90.o
+	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-# Define dependencies between object files
+	# Define dependencies between object files
 # Programs
 src/single_path_3D_discrete.f90.o: src/kind_parameters.f90.o src/stochastics.f90.o src/randf.f90.o
 
@@ -77,6 +86,12 @@ src/mrna_protein_feedback.f90.o: src/kind_parameters.f90.o src/mrna_protein_syst
 src/mrna_protein_false_rates.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
 
 src/simplex_cascade_2_discrete.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o src/nr_minmax.f90.o
+
+src/simplex_cascade_3_discrete.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o src/nr_minmax.f90.o
+
+src/acov_discrete_cascade_2D.f90.o: src/kind_parameters.f90.o src/randf.f90.o src/utilities.f90.o src/stochastics.f90.o
+
+src/acov_cascade_2D.f90.o: src/kind_parameters.f90.o src/randf.f90.o src/utilities.f90.o src/stochastics.f90.o
 
 # Modules
 src/kind_parameters.f90.o:

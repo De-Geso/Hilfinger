@@ -45,7 +45,18 @@ function relative_change(x, y, method) result(change)
 end function relative_change
 
 
+subroutine dump_current_time()
+    integer :: values(8)
+    character(19) :: formatted_time
+
+	call date_and_time(VALUES=values)
+	write(formatted_time, '(I2.2, ":", I2.2, ":", I2.2)') values(5), values(6), values(7)
+	write(*,*) formatted_time
+end subroutine
+
+
 ! Functions below this line might be shitty ============================
+
 
 
 pure function percent_difference (a, b) result (x)
@@ -54,6 +65,7 @@ pure function percent_difference (a, b) result (x)
 	real(dp) :: x
 	x = 100._dp * abs(a-b) / ((a+b)/2)
 end function percent_difference
+
 
 subroutine get_command_line_arg(x, i)
 	integer, intent(in) :: i
@@ -65,6 +77,7 @@ subroutine get_command_line_arg(x, i)
 	! Convert argument from string to real
 	read(arg, *) x
 end subroutine get_command_line_arg
+
 
 subroutine generate_ISO_filename(path, prefix, suffix, filename)
 ! Generates an ISO 8601 compliant filename suffix. Used to create
@@ -81,6 +94,7 @@ subroutine generate_ISO_filename(path, prefix, suffix, filename)
 	! Create filename
 	filename = trim(adjustl(path)) // trim(adjustl(prefix)) // trim(adjustl(datetime)) // trim(adjustl(suffix))
 end subroutine
+
 
 function linspace(start,end,num,endpoint,step) result(samples)
 	! PARAMETERS
