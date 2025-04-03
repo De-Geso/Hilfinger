@@ -1,16 +1,16 @@
 import numpy as np
 
-nfiles = 10
+nfiles = 1
 fpre = "kn"
 
 # Initialize column values
-xmin = 30
-xmax = 50
-ymin = 1
-ymax = 4
+xmin = 40
+xmax = 40
+ymin = 0.5
+ymax = 10
 
-incx = 1/8
-incy = 1/8
+incx = 1
+incy = 1/16
 
 nx = int(abs(xmax-xmin)/incx+1)
 ny = int(abs(ymax-ymin)/incy+1)
@@ -28,7 +28,7 @@ for i in range(nx):
 	for j in range(ny):
 		f.write(f"{xx[i]} {yy[j]}\n")
 		counter += 1
-		if (counter % np.ceil(nx*ny/nfiles) == 0):
+		if (counter % np.ceil(nx*ny/nfiles) == 0 and nfiles > 1):
 			fnum += 1
 			fname = f"{fpre}_{fnum}.txt"
 			f = open(fname, "w")
