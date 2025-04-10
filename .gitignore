@@ -2,6 +2,11 @@
 data/
 res/
 bin/
+doc/
 # File extensions
 *.mod
 *.f90.o
+*.dat
+*.o
+# Fortran output files
+fort.*
