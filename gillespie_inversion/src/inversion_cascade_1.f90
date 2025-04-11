@@ -5,12 +5,13 @@ use randf
 use utilities
 implicit none
 
-character(len=*), parameter :: prefix = "dimer"
+character(len=*), parameter :: fpath = "data/"
+character(len=*), parameter :: fname = "dimer"
 
 real(dp), parameter :: eps=tiny(eps)
 
 integer, parameter :: event_min = 10**6
-integer, parameter :: abund_max = 64
+integer, parameter :: abund_max = 128
 
 ! System parameters ====================================================
 real(dp), parameter :: lmbda = 10._dp
@@ -18,7 +19,7 @@ real(dp), parameter :: beta = 1._dp
 real(dp), parameter :: k = 10._dp
 real(dp), parameter :: n = 2._dp
 real(dp), parameter :: c = 0._dp
-integer, parameter, dimension(2) :: burst = [2, -1]
+integer, parameter, dimension(2) :: burst = [3, -2]
 integer, parameter, dimension(2) :: abund_update = [burst(1), burst(2)]
 
 real(dp) :: t=0._dp, tstep
@@ -57,7 +58,7 @@ do while (minval(event_count) < event_min)
 	call gillespie_iter(tstep, event, propensity)
 	
 	! Online calculation of mean and covariance
-	call cov_balance%update(real(x,dp), propensity(2) - propensity(1), tstep)
+	call cov_balance%update(real(x,dp), abs(burst(2))*propensity(2) - abs(burst(1))*propensity(1), tstep)
 	call x_cov%update(real(x,dp), real(x,dp), tstep)
 		
 	visits_exits(x+1, 1) = visits_exits(x+1, 1) + 1
@@ -82,28 +83,29 @@ call dump()
 write(*,*) "x mean:", x_mean
 write(*,*) "x covariance:", x_cov%get_cov()
 write(*,*) "r mean:", r_mean
-call check_covariance_balance(cov_balance%get_cov(), x_mean, r_mean)
+call check_covariance_balance(cov_balance%get_cov(), x_mean, r_mean, burst, "arithmetic")
 
 
 contains
 
 
-subroutine check_covariance_balance(cov, x_avg, r_avg)
-	character(len=*), parameter :: change_method = "logarithmic"
+subroutine check_covariance_balance(cov, x_avg, r_avg, burst, change_method)
+	character(len=*), intent(in) :: change_method
 	real(dp), intent(in) :: cov, x_avg, r_avg(2)
+	integer, intent(in) :: burst(2)
 	real(dp) :: rel_change, U, D, tau, s, flux_avg(2)
 	
 	flux_avg = abs(r_avg * burst)
 	
 	tau = 1._dp * x_avg / flux_avg(2)
 	s = 0.5_dp * (burst(1) - burst(2))
-	
-	U = 2._dp/tau * cov / x_avg / (sum(flux_avg)/size(flux_avg))
+		
+	U = 1._dp/tau * cov / x_avg / (sum(flux_avg)/size(flux_avg))
 	D = 2._dp/tau * s / x_avg
-	rel_change = relative_change(U, D, change_method)
+	rel_change = relative_change(2._dp*U, D, change_method)
 	
-	write(*,*) change_method, " relative change between Uij and Dij:", rel_change
-	write(*,*) "U:", U, "D:", D
+	write(*,*) change_method, " relative change between 2U and D:", rel_change
+	write(*,*) "2U:", 2._dp*U, "D:", D
 end subroutine
 
 pure function Rin(x) result(f)
@@ -119,7 +121,7 @@ pure function Rout(x) result(f)
 	integer, intent(in) :: x
 	real(dp) :: f
 	
-	f = 1._dp * x * beta
+	f = 1._dp * x * (x-1) * beta
 end function
 
 
@@ -134,8 +136,8 @@ end subroutine
 
 
 subroutine dump()
-	character(len=32) :: filename
-	character(len=32) :: headers(9)
+	character(len=64) :: filename
+	character(len=20) :: headers(9)
 	integer :: i, fnum, io, ios
 	
 	headers(1) = "x"
@@ -148,12 +150,35 @@ subroutine dump()
 	headers(8) = "Rout_infer"
 	headers(9) = "Rout_true"
 	
-	fnum = int(log10(real(event_min)))
-	write(filename, "(A,A,I0,A)") prefix, ".dat"
+	call generate_ISO_filename(fpath, fname, ".dat", filename)
+	! write(filename, "(A,A,I0,A)") fname, ".dat"
 	
 	open(io, file=trim(filename), status="replace", action="write")
 	write(*,*) "Output at: ", filename
-		
+	
+	! Write metadata
+	write(io,*) "# Program Metadata"
+	write(io,*) "# Program: inversion_cascade_1.f90"
+	write(io,*) "# Creation date: ", fdate()
+	write(io,*) "# Seed: ", rseed
+	write(io,*) "# Min events: ", event_min
+	write(io,*) "# Maximum abundance: ", abund_max
+	write(io,*) ""
+	write(io,*) ""
+	write(io,*) "# Parameter Metadata"
+	write(io,*) "# lmbda: ", lmbda
+	write(io,*) "# k: ", k
+	write(io,*) "# n: ", n
+	write(io,*) "# c: ", c
+	write(io,*) "# beta: ", beta
+	write(io,*) "# x_mean: ", x_mean
+	write(io,*) "# rx+_mean: ", r_mean(1)
+	write(io,*) "# rx-_avg: ", r_mean(2)
+	write(io,*) ""
+	write(io,*) ""
+	write(io,*) "# Data"
+	
+	! Write headers	
 	write(io, '(9(A20))') trim(headers(1)), &
 		trim(headers(2)), &
 		trim(headers(3)), &
