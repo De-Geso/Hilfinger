@@ -1,4 +1,4 @@
-program inversion_cascade_1
+program inversion_cascade_1D
 use kind_parameters
 use stochastics
 use randf
@@ -151,7 +151,6 @@ subroutine dump()
 	headers(9) = "Rout_true"
 	
 	call generate_ISO_filename(fpath, fname, ".dat", filename)
-	! write(filename, "(A,A,I0,A)") fname, ".dat"
 	
 	open(io, file=trim(filename), status="replace", action="write")
 	write(*,*) "Output at: ", filename
