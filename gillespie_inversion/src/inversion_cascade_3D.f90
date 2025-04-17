@@ -13,8 +13,7 @@ character(len=*), parameter :: fname = "dimer_3D"
 
 real(dp), parameter :: eps=tiny(eps)
 
-integer, parameter :: event_min = 2
-integer, parameter :: abund_max = 128
+integer, parameter :: event_min = 10**6
 
 ! System parameters ====================================================
 real(dp), parameter :: lmbda = 1._dp
@@ -25,82 +24,61 @@ real(dp), parameter :: c = 0._dp
 integer, parameter, dimension(2) :: burst = [1, -1]
 integer, parameter, dimension(2) :: abund_update = [burst(1), burst(2)]
 
+! Variables ============================================================
+! Timers and counters
 real(dp) :: t=0._dp, tstep
-real(dp) :: r_infer(abund_max,2)
+integer, allocatable :: visits(:)
+integer, allocatable :: exits(:,:)
+! Stats
+real(dp), allocatable :: r_infer(:,:)
 type(OnlineCovariance) :: cov_balance, x_cov
-integer :: visits_exits(abund_max,3)=0
 real(dp) :: x_mean, r_mean(2)
 ! Gillespie
 real(dp) :: propensity(2), roll
-integer :: x=0, x_last, x_max=0, event_count(2)=0, event
+integer :: x=0, x_last, event_count(2)=0, event
 ! Other
 integer :: i, nseed
 integer, allocatable :: rseed(:)
 
-
-!! Here the program begins ==============================================
-
+! Hashmap ==============================================================
 type :: state_data
 	real(dp) :: time_spent
 	integer :: visit_count
+	integer :: exit_count(2)
 end type state_data
-
-type(chaining_hashmap_type) :: state_map
+type(chaining_hashmap_type) :: map
 type(key_type) :: key
 type(state_data) :: values
 class(*), allocatable :: retrieved_values
 logical :: conflict, key_exists
 
+
+
 ! Initialize hashmap with 2^10 slots.
 ! Hashmap will dynamically increase size if needed.
-call state_map%init(seeded_water_hasher, slots_bits=10)
+call map%init(seeded_water_hasher, slots_bits=10)
 
+! Initialize random seeding
 call random_seed(put=seed)
 ! Get random seed for output in metadata
 call random_seed(size=nseed)
 allocate(rseed(nseed))
 call random_seed(get=rseed)
 		
-do while (minval(event_count) < event_min)	
-	if (x > x_max) x_max = x
-	
+do while (minval(event_count) < event_min)
 	! Update the propensity before taking a Gillespie step
-	call update_propensity(propensity, x, lmbda, beta)
+	call update_propensity(propensity, x)
 	! Get timestep and event from Gillespie algorithm
 	call gillespie_iter(tstep, event, propensity)
 	
 	! Online calculation of mean and covariance
 	call cov_balance%update(real(x,dp), abs(burst(2))*propensity(2) - abs(burst(1))*propensity(1), tstep)
 	call x_cov%update(real(x,dp), real(x,dp), tstep)
-		
+	
+	! Update hashmap
 	! Set key from state of system
-	call set(key, [x])
-	! Check if key exists
-	call state_map%key_test(key, key_exists)
-	
-	print *, x
-	if (key_exists) then
-		call state_map%get_other_data(key, retrieved_values)
-		print *, "Key exists"
-		select type (retrieved_values)
-		type is (state_data)
-			values%time_spent = retrieved_values%time_spent + tstep
-			values%visit_count = retrieved_values%visit_count + 1
-			print *, 'Retrieved % time spent = ', retrieved_values%time_spent
-			print *, 'Retrieved % visit count = ', retrieved_values%visit_count
-			call state_map%remove(key)
-		class default
-			print *, 'Invalid data type in other'
-		end select		
-	else
-		values%time_spent = tstep
-		values%visit_count = 1
-		print *, "Key does not exist"
-	end if
-	print *, 'Values % time spent = ', values%time_spent
-	print *, 'Values % visit count = ', values%visit_count
-	
-	call state_map%map_entry(key, values, conflict)
+	call set(key, [x, 2, 54])
+	call update_hashmap(map, key, tstep, event)
 	
 	! Update state of system in preparation for next step.
 	t = t + tstep
@@ -111,17 +89,51 @@ end do
 !r_infer(:,1) = visits_exits(:,2) / (pcond(:) * t + eps)
 !r_infer(:,2) = visits_exits(:,3) / (pcond(:) * t + eps)
 
-!x_mean = x_cov%mean_x
-!r_mean = event_count/t
+x_mean = x_cov%mean_x
+r_mean = event_count/t
 
 call dump()
-!write(*,*) "x mean:", x_mean
-!write(*,*) "x covariance:", x_cov%get_cov()
-!write(*,*) "r mean:", r_mean
-!call check_covariance_balance(cov_balance%get_cov(), x_mean, r_mean, burst, "arithmetic")
+write(*,*) "x mean:", x_mean
+write(*,*) "x covariance:", x_cov%get_cov()
+write(*,*) "r mean:", r_mean
+call check_covariance_balance(cov_balance%get_cov(), x_mean, r_mean, burst, "arithmetic")
 
 
 contains
+
+
+subroutine update_hashmap(this, key, dt, r_channel)
+! Put a new entry into the hashmap, or update an entry if it already exists
+	type(chaining_hashmap_type), intent(inout) :: this
+	type(key_type), intent(in) :: key
+	real(dp), intent(in) :: dt
+	integer, intent(in) :: r_channel
+	type(state_data) :: new
+	class(*), allocatable :: other
+	logical :: key_exists
+	
+	! Check key existence
+	call this%key_test(key, key_exists)
+	! If exists, update entry
+	if (key_exists) then
+	! other is polymorphic, so need to set type to work with it
+		call this%get_other_data(key, other)
+		select type (other)
+		type is (state_data)
+			other%time_spent = other%time_spent + dt
+			other%visit_count = other%visit_count + 1
+			other%exit_count(event) = other%exit_count(r_channel) + 1
+			call this%set_other_data(key, other)
+		end select		
+	! If doesn't exists, initialize new entry
+	else
+		new%time_spent = tstep
+		new%visit_count = 1
+		new%exit_count = 0
+		new%exit_count(event) = 1
+		call this%map_entry(key, new, conflict)
+	end if
+end subroutine
 
 
 subroutine check_covariance_balance(cov, x_avg, r_avg, burst, change_method)
@@ -139,7 +151,7 @@ subroutine check_covariance_balance(cov, x_avg, r_avg, burst, change_method)
 	D = 2._dp/tau * s / x_avg
 	rel_change = relative_change(2._dp*U, D, change_method)
 	
-	write(*,*) change_method, " relative change between 2U and D:", rel_change
+	write(*,*) change_method, " relative change between U+U^T and D:", rel_change
 	write(*,*) "2U:", 2._dp*U, "D:", D
 end subroutine
 
@@ -161,9 +173,8 @@ pure function Rout(x) result(f)
 end function
 
 
-subroutine update_propensity(prop, x, lmbda, beta)
+subroutine update_propensity(prop, x)
 	integer, intent(in) :: x
-	real(dp), intent(in) :: lmbda, beta
 	real(dp), dimension(2), intent(out) :: prop
 	
 	prop(1) = Rin(x)
@@ -176,18 +187,23 @@ subroutine dump()
 	character(len=20) :: headers(9)
 	integer :: i, fnum, io, ios
 	type(key_type), allocatable :: keys(:)
+	integer, allocatable :: test(:)
 	
 	
 	! Getting all the keys in the map
-	call state_map%get_all_keys(keys)
+	call map%get_all_keys(keys)
 
 	print '("Number of keys in the hashmap = ", I0)', size(keys)
 
 	do i = 1, size(keys)
-		call state_map%get_other_data(keys(i), retrieved_values)
+		call set(key, [i-1, 2, 54])
+		call map%get_other_data(key, retrieved_values)
 		select type (retrieved_values)
 		type is (state_data)
-		print '("Value of key ", I0, " = ", F20.12)', i, retrieved_values%time_spent
+		print '("State ", I0, " = ", F20.12, " ", I0, " ", I0, " ", I0)', &
+			i-1, retrieved_values%time_spent/t, retrieved_values%visit_count, retrieved_values%exit_count
+		call get(keys(i), test)
+		write(*,*) i, test
 		end select		
 	end do
 
@@ -214,7 +230,6 @@ subroutine dump()
 	write(io,*) "# Creation date: ", fdate()
 	write(io,*) "# Seed: ", rseed
 	write(io,*) "# Min events: ", event_min
-	write(io,*) "# Maximum abundance: ", abund_max
 	write(io,*) ""
 	write(io,*) ""
 	write(io,*) "# Parameter Metadata"
