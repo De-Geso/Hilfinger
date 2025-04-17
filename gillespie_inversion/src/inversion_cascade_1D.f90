@@ -14,12 +14,12 @@ integer, parameter :: event_min = 10**6
 integer, parameter :: abund_max = 128
 
 ! System parameters ====================================================
-real(dp), parameter :: lmbda = 10._dp
+real(dp), parameter :: lmbda = 1._dp
 real(dp), parameter :: beta = 1._dp
 real(dp), parameter :: k = 10._dp
 real(dp), parameter :: n = 2._dp
 real(dp), parameter :: c = 0._dp
-integer, parameter, dimension(2) :: burst = [3, -2]
+integer, parameter, dimension(2) :: burst = [1, -1]
 integer, parameter, dimension(2) :: abund_update = [burst(1), burst(2)]
 
 real(dp) :: t=0._dp, tstep
@@ -121,7 +121,7 @@ pure function Rout(x) result(f)
 	integer, intent(in) :: x
 	real(dp) :: f
 	
-	f = 1._dp * x * (x-1) * beta
+	f = 1._dp * x * beta
 end function
 
 

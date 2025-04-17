@@ -29,7 +29,7 @@ integer, parameter, dimension(2) :: abund_update = [burst(1), burst(2)]
 real(dp) :: t=0._dp, tstep
 integer, allocatable :: visits(:)
 integer, allocatable :: exits(:,:)
-! Stats
+! Stats/calculated
 real(dp), allocatable :: r_infer(:,:)
 type(OnlineCovariance) :: cov_balance, x_cov
 real(dp) :: x_mean, r_mean(2)
@@ -48,6 +48,7 @@ type :: state_data
 end type state_data
 type(chaining_hashmap_type) :: map
 type(key_type) :: key
+type(key_type), allocatable :: keys(:)
 type(state_data) :: values
 class(*), allocatable :: retrieved_values
 logical :: conflict, key_exists
@@ -58,9 +59,8 @@ logical :: conflict, key_exists
 ! Hashmap will dynamically increase size if needed.
 call map%init(seeded_water_hasher, slots_bits=10)
 
-! Initialize random seeding
+! Initialize random seeding, and get random seed for output in metadata
 call random_seed(put=seed)
-! Get random seed for output in metadata
 call random_seed(size=nseed)
 allocate(rseed(nseed))
 call random_seed(get=rseed)
@@ -76,18 +76,26 @@ do while (minval(event_count) < event_min)
 	call x_cov%update(real(x,dp), real(x,dp), tstep)
 	
 	! Update hashmap
-	! Set key from state of system
-	call set(key, [x, 2, 54])
+	call set(key, [x])
 	call update_hashmap(map, key, tstep, event)
 	
-	! Update state of system in preparation for next step.
+	! Update state of system for next step
 	t = t + tstep
 	x = x + abund_update(event)
 	event_count(event) = event_count(event) + 1
 end do
 
-!r_infer(:,1) = visits_exits(:,2) / (pcond(:) * t + eps)
-!r_infer(:,2) = visits_exits(:,3) / (pcond(:) * t + eps)
+call map%get_all_keys(keys)
+
+allocate(r_infer(size(keys),2))
+do i = 1, size(keys)
+	call map%get_other_data(keys(i), retrieved_values)
+	select type (retrieved_values)
+	type is (state_data)	
+		r_infer(i,1) = retrieved_values%exit_count(1) / retrieved_values%time_spent
+		r_infer(i,2) = retrieved_values%exit_count(2) / retrieved_values%time_spent
+	end select
+end do
 
 x_mean = x_cov%mean_x
 r_mean = event_count/t
@@ -186,24 +194,19 @@ subroutine dump()
 	character(len=64) :: filename
 	character(len=20) :: headers(9)
 	integer :: i, fnum, io, ios
-	type(key_type), allocatable :: keys(:)
 	integer, allocatable :: test(:)
-	
-	
-	! Getting all the keys in the map
-	call map%get_all_keys(keys)
 
 	print '("Number of keys in the hashmap = ", I0)', size(keys)
 
 	do i = 1, size(keys)
-		call set(key, [i-1, 2, 54])
+		call set(key, [i-1])
 		call map%get_other_data(key, retrieved_values)
 		select type (retrieved_values)
 		type is (state_data)
-		print '("State ", I0, " = ", F20.12, " ", I0, " ", I0, " ", I0)', &
-			i-1, retrieved_values%time_spent/t, retrieved_values%visit_count, retrieved_values%exit_count
-		call get(keys(i), test)
-		write(*,*) i, test
+			print '("State ", I0, " = ", F20.12, " ", I0, " ", I0, " ", I0)', &
+				i-1, retrieved_values%time_spent/t, retrieved_values%visit_count, retrieved_values%exit_count
+			call get(keys(i), test)
+			write(*,*) i, test
 		end select		
 	end do
 
@@ -256,18 +259,23 @@ subroutine dump()
 		trim(headers(8)), &
 		trim(headers(9))
 		
-!	do i = 1, x_max+1
-!		write(io,'(I20, G20.12, I20, I20, I20, G20.12, G20.12, G20.12, G20.12)') &
-!			i-1, &
-!			pcond(i), &
-!			visits_exits(i,1), &
-!			visits_exits(i,2), &
-!			visits_exits(i,3), &
-!			r_infer(i,1), &
-!			Rin(i-1), &
-!			r_infer(i,2), &
-!			Rout(i-1)
-!	end do
+	do i = 1, size(keys)
+!		call set(key, keys(i))
+		call map%get_other_data(keys(i), retrieved_values)
+		select type (retrieved_values)
+		type is (state_data)
+			write(io,'(I20, G20.12, I20, I20, I20, G20.12, G20.12, G20.12, G20.12)') &
+			i-1, &
+			retrieved_values%time_spent/t, &
+			retrieved_values%visit_count, &
+			retrieved_values%exit_count(1), &
+			retrieved_values%exit_count(2), &
+			r_infer(i,1), &
+			Rin(i-1), &
+			r_infer(i,2), &
+			Rout(i-1)
+		end select
+	end do
 end subroutine
 
 
