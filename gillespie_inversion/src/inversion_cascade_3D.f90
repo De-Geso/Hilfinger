@@ -23,13 +23,12 @@ real(dp), parameter, dimension(n_species) :: k = 10._dp
 real(dp), parameter, dimension(n_species) :: n = 2._dp
 real(dp), parameter, dimension(n_species) :: c = 0._dp
 integer, parameter, dimension(n_species, n_reactions) :: burst = &
-	reshape((/1, 0, 0, &
+	reshape((/2, 0, 0, &
 			-1, 0, 0, &
 			0, 1, 0, &
 			0, -1, 0, &
 			0, 0, 1, &
-			0, 0, -1/), shape(burst)), &
-			abund_update = burst
+			0, 0, -1/), shape(burst))
 
 ! Variables ============================================================
 ! Timers and counters
@@ -94,7 +93,7 @@ do while (minval(event_count) < event_min)
 	
 	! Update state of system for next step
 	t = t + tstep
-	x = x + abund_update(:,event)
+	x = x + burst(:,event)
 	event_count(event) = event_count(event) + 1
 end do
 
@@ -202,16 +201,26 @@ subroutine check_covariance_balance(nx, nr, cov, x_avg, r_avg, burst, change_met
 	end do
 	end do
 	end do
-	print *, s
 	
-	write(*,*) change_method, " relative change between U(i,j)+U(j,i) and D(i,j) (D!=0):"
+	! Calculate diffusion and correlation matrices
 	do i = 1, nx
 	do j = 1, nx
-		if (s(i,j) > eps) then
-			U(i,j) = 1._dp/tau(j) * cov(i,j)/(x_avg(i)*0.5*(flux_avg(j,1)+flux_avg(j,2)))
-			D(i,j) = s(i,j)/tau(i)/x_avg(j) + s(j,i)/tau(j)/x_avg(i)
+		U(i,j) = 1._dp/tau(j) * cov(i,j)/(x_avg(i)*0.5*(flux_avg(j,1)+flux_avg(j,2)))
+		D(i,j) = s(i,j)/tau(i)/x_avg(j) + s(j,i)/tau(j)/x_avg(i)
+	end do
+	end do
+	
+	! Output results
+	write(*,*) change_method, " relative change between U(i,j)+U(j,i) and D(i,j) (D!=0):"
+	write(*,'(*(A20))') "i", "j", "Relative change", "U+U^T", "D"
+	do i = 1, nx
+	do j = 1, nx
+		if (D(i,j) > eps) then
 			rel_change = relative_change(U(i,j)+U(j,i), D(i,j), change_method)
-			write(*,*) "i:", i, "j:", j, "Relative change:", rel_change, "U+U^T: ", U(i,j)+U(j,i), "D:", D(i,j)
+			write(*,'(2(I20),3(G20.12))') i, j, rel_change, U(i,j)+U(j,i), D(i,j)
+		else
+			rel_change = relative_change(U(i,j), -U(j,i), change_method)
+			write(*,'(2(I20),*(G20.12))') i, j, rel_change, U(i,j), -U(j,i), 0.5*(flux_avg(j,1)+flux_avg(j,2))
 		end if
 	end do
 	end do
@@ -219,8 +228,8 @@ end subroutine
 
 
 pure function rates(x) result(r)
-	integer, intent(in) :: x(3)
-	real(dp) :: r(6)
+	integer, intent(in) :: x(n_species)
+	real(dp) :: r(n_reactions)
 	
 	r(1) = 1._dp * lmbda(1)
 	r(2) = 1._dp * x(1) * beta(1)
@@ -235,52 +244,61 @@ end function
 
 subroutine dump()
 	character(len=64) :: filename
-	character(len=20) :: headers(9)
+	character(len=20) :: headers(17)
 	integer :: i, fnum, io, ios
 	integer, allocatable :: state(:)
 	real(dp) :: r(6)
 	
 	print '("Number of keys in the hashmap = ", I0)', size(keys)
 	
-	headers(1) = "x"
-	headers(2) = "probability"
-	headers(3) = "visits"
-	headers(4) = "births"
-	headers(5) = "deaths"
-	headers(6) = "Rin_infer"
-	headers(7) = "Rin_true"
-	headers(8) = "Rout_infer"
-	headers(9) = "Rout_true"
+	headers(1) = "x1"
+	headers(2) = "x2"
+	headers(3) = "x3"
+	headers(4) = "visits"
+	headers(5) = "probability"
+	headers(6) = "r1_inf"
+	headers(7) = "r1_true"
+	headers(8) = "r2_inf"
+	headers(9) = "r2_true"
+	headers(10) = "r3_inf"
+	headers(11) = "r3_true"
+	headers(12) = "r4_inf"
+	headers(13) = "r4_true"
+	headers(14) = "r5_inf"
+	headers(15) = "r5_true"
+	headers(16) = "r6_inf"
+	headers(17) = "r6_true"
 	
 	call generate_ISO_filename(fpath, fname, ".dat", filename)
-	! write(filename, "(A,A,I0,A)") fname, ".dat"
 	
 	open(io, file=trim(filename), status="replace", action="write")
 	write(*,*) "Output at: ", filename
 	
 	! Write metadata
 	write(io,*) "# Program Metadata"
-	write(io,*) "# Program: inversion_cascade_1.f90"
+	write(io,*) "# Program: inversion_cascade_3D.f90"
 	write(io,*) "# Creation date: ", fdate()
 	write(io,*) "# Seed: ", rseed
 	write(io,*) "# Min events: ", event_min
+	write(io,*) "# n_species: ", n_species
+	write(io,*) "# n_reactions: ", n_reactions
 	write(io,*) ""
 	write(io,*) ""
 	write(io,*) "# Parameter Metadata"
+	write(io,*) "# Burst: ", burst
 	write(io,*) "# lmbda: ", lmbda
 	write(io,*) "# k: ", k
 	write(io,*) "# n: ", n
 	write(io,*) "# c: ", c
 	write(io,*) "# beta: ", beta
 	write(io,*) "# x_mean: ", x_mean
-	write(io,*) "# rx+_mean: ", r_mean(1)
-	write(io,*) "# rx-_avg: ", r_mean(2)
+	write(io,*) "# r_mean: ", r_mean
 	write(io,*) ""
 	write(io,*) ""
 	write(io,*) "# Data"
 	
 	! Write headers	
-	write(io, '(9(A20))') trim(headers(1)), &
+	write(io, '(17(A20))') trim(headers(1)), &
 		trim(headers(2)), &
 		trim(headers(3)), &
 		trim(headers(4)), &
@@ -288,24 +306,26 @@ subroutine dump()
 		trim(headers(6)), &
 		trim(headers(7)), &
 		trim(headers(8)), &
-		trim(headers(9))
+		trim(headers(9)), &
+		trim(headers(10)), &
+		trim(headers(11)), &
+		trim(headers(12)), &
+		trim(headers(13)), &
+		trim(headers(14)), &
+		trim(headers(15)), &
+		trim(headers(16)), &
+		trim(headers(17))
 		
-!	do i = 1, size(keys)
-!!		call set(key, keys(i))
-!		call map%get_other_data(keys(i), retrieved)
-!		select type (retrieved)
-!		type is (state_data)
-!			write(io,'(I20, G20.12, I20, I20, I20, G20.12, G20.12, G20.12, G20.12)') &
 	do i = 1, size(keys)
 	    call get(keys(i), state)
 	    r = rates(state)
 		call map%get_other_data(keys(i), retrieved)
 		select type (retrieved)
 		type is (state_data)
-			write(io,*) & 
+			write(io,'(4(I20), 13(G20.12))') & 
 				state, &
-				retrieved%time_spent/t, &
 				retrieved%visit_count, &
+				retrieved%time_spent/t, &
 				r_infer(i,1), &
 				r(1), &
 				r_infer(i,2), &
@@ -320,7 +340,6 @@ subroutine dump()
 				r(6)
 		end select		
 	end do
-
 end subroutine
 
 
