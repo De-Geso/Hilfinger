@@ -16,19 +16,20 @@ real(dp), parameter :: eps=tiny(eps)
 integer, parameter :: event_min = 10**6
 
 ! System parameters ====================================================
-real(dp), parameter, dimension(3) :: lmbda = 2._dp
-real(dp), parameter, dimension(3) :: beta = 1._dp
-real(dp), parameter, dimension(3) :: k = 10._dp
-real(dp), parameter, dimension(3) :: n = 2._dp
-real(dp), parameter, dimension(3) :: c = 0._dp
-integer, parameter, dimension(3,6) :: burst = &
+integer, parameter :: n_species = 3, n_reactions = 6
+real(dp), parameter, dimension(n_species) :: lmbda = 2._dp
+real(dp), parameter, dimension(n_species) :: beta = 1._dp
+real(dp), parameter, dimension(n_species) :: k = 10._dp
+real(dp), parameter, dimension(n_species) :: n = 2._dp
+real(dp), parameter, dimension(n_species) :: c = 0._dp
+integer, parameter, dimension(n_species, n_reactions) :: burst = &
 	reshape((/1, 0, 0, &
 			-1, 0, 0, &
 			0, 1, 0, &
 			0, -1, 0, &
 			0, 0, 1, &
-			0, 0, -1/), shape(burst))
-integer, parameter, dimension(3,6) :: abund_update = burst
+			0, 0, -1/), shape(burst)), &
+			abund_update = burst
 
 ! Variables ============================================================
 ! Timers and counters
@@ -37,12 +38,12 @@ integer, allocatable :: visits(:)
 integer, allocatable :: exits(:,:)
 ! Stats/calculated
 real(dp), allocatable :: r_infer(:,:)
-type(OnlineCovariance) :: online_cov_balance(3,3), online_x_cov(3)
-real(dp) :: cov_balance(3,3), x_cov(3)
-real(dp) :: x_mean(3), r_mean(6)
+type(OnlineCovariance) :: online_cov_balance(n_species, n_species), online_x_cov(n_species)
+real(dp) :: cov_balance(n_species, n_species), x_cov(n_species)
+real(dp) :: x_mean(n_species), r_mean(n_reactions)
 ! Gillespie
-real(dp) :: propensity(6), roll
-integer :: x(3)=0, event_count(6)=0, event
+real(dp) :: propensity(n_reactions), roll
+integer :: x(n_species)=0, event_count(n_reactions)=0, event
 ! Other
 integer :: i, j, nseed
 integer, allocatable :: rseed(:)
@@ -51,7 +52,7 @@ integer, allocatable :: rseed(:)
 type :: state_data
 	real(dp) :: time_spent
 	integer :: visit_count
-	integer :: exit_count(6)
+	integer :: exit_count(n_reactions)
 end type state_data
 type(chaining_hashmap_type) :: map
 type(key_type) :: key
@@ -78,9 +79,9 @@ do while (minval(event_count) < event_min)
 	call gillespie_iter(tstep, event, propensity)
 	
 	! Online calculation of mean and covariance
-	do i = 1,3
+	do i = 1, n_species
 		call online_x_cov(i)%update(real(x(i),dp), real(x(i),dp), tstep)
-		do j = 1,3
+		do j = 1, n_species
 			call online_cov_balance(i,j)%update(&
 				real(x(i),dp), &
 				abs(burst(j,2*j))*propensity(2*j) - abs(burst(j,j))*propensity(j), tstep)
@@ -101,7 +102,7 @@ end do
 call map%get_all_keys(keys)
 
 ! Use retrieved keys and values to infer rates
-allocate(r_infer(size(keys),size(burst,dim=2)))
+allocate(r_infer(size(keys), n_reactions))
 do i = 1, size(keys)
 	call map%get_other_data(keys(i), retrieved)
 	select type (retrieved)
@@ -113,9 +114,9 @@ end do
 ! Stats stuff for validity of simulation, i.e. check covariance balance
 x_mean = online_x_cov%mean_x
 r_mean = event_count/t
-do i = 1,3
+do i = 1, n_species
 	x_cov(i) = online_x_cov(i)%get_cov()
-do j = 1,3
+do j = 1, n_species
 	cov_balance(i,j) = online_cov_balance(i,j)%get_cov()
 end do
 end do
@@ -124,7 +125,7 @@ write(*,*) "x mean:", x_mean
 write(*,*) "x covariance:", x_cov
 write(*,*) "r mean:", r_mean
 
-call check_covariance_balance(3, cov_balance, x_mean, r_mean, burst, "arithmetic")
+call check_covariance_balance(n_species, n_reactions, cov_balance, x_mean, r_mean, burst, "arithmetic")
 call dump()
 
 
@@ -133,6 +134,7 @@ contains
 
 subroutine update_hashmap(this, key, dt, r_channel)
 ! Put a new entry into the hashmap, or update an entry if it already exists
+! Would love to make this general, but the derived type makes this difficult
 	type(chaining_hashmap_type), intent(inout) :: this
 	type(key_type), intent(in) :: key
 	real(dp), intent(in) :: dt
@@ -165,18 +167,18 @@ subroutine update_hashmap(this, key, dt, r_channel)
 end subroutine
 
 
-subroutine check_covariance_balance(n, cov, x_avg, r_avg, burst, change_method)
+subroutine check_covariance_balance(nx, nr, cov, x_avg, r_avg, burst, change_method)
 	character(len=*), intent(in) :: change_method
-	real(dp), intent(in) :: cov(n,n), x_avg(n), r_avg(:)
-	integer, intent(in) :: n, burst(n,2*n)
-	real(dp) :: rel_change, U(n,n), D(n,n), tau(n), s(n,n), flux_avg(n,2)
+	real(dp), intent(in) :: cov(nx,nx), x_avg(nx), r_avg(nr)
+	integer, intent(in) :: nx, nr, burst(nx, nr)
+	real(dp) :: rel_change, U(nx, nx), D(nx, nx), tau(nx), s(nx,nx), flux_avg(nx,2)
 	integer :: i, j, k
 	
-	
+		
 	! Get fluxes
 	flux_avg = 0
-	do i = 1, n
-	do k = 1, size(r_avg)
+	do i = 1, nx
+	do k = 1, nr
 		if (burst(i,k) > 0) then
 			flux_avg(i,1) = flux_avg(i,1) + r_avg(k)*abs(burst(i,k))
 		elseif (burst(i,k) < 0) then
@@ -192,9 +194,9 @@ subroutine check_covariance_balance(n, cov, x_avg, r_avg, burst, change_method)
 	
 	! Get step sizes
 	s = 0._dp
-	do i = 1, n
-	do j = 1, n
-	do k = 1, size(r_avg)
+	do i = 1, nx
+	do j = 1, nx
+	do k = 1, nr
 		s(i,j) = s(i,j) + (r_avg(k)*abs(burst(i,k))/sum(r_avg(:)*abs(burst(i,:))) &
 			* abs(burst(j,k)) * sign(1, burst(i,k)*burst(j,k)))
 	end do
@@ -203,8 +205,8 @@ subroutine check_covariance_balance(n, cov, x_avg, r_avg, burst, change_method)
 	print *, s
 	
 	write(*,*) change_method, " relative change between U(i,j)+U(j,i) and D(i,j) (D!=0):"
-	do i = 1, n
-	do j = 1, n
+	do i = 1, nx
+	do j = 1, nx
 		if (s(i,j) > eps) then
 			U(i,j) = 1._dp/tau(j) * cov(i,j)/(x_avg(i)*0.5*(flux_avg(j,1)+flux_avg(j,2)))
 			D(i,j) = s(i,j)/tau(i)/x_avg(j) + s(j,i)/tau(j)/x_avg(i)
