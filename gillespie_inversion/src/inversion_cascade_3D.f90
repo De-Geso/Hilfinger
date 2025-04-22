@@ -16,13 +16,13 @@ real(dp), parameter :: eps=tiny(eps)
 integer, parameter :: event_min = 10**6
 
 ! System parameters ====================================================
-real(dp), parameter, dimension(3) :: lmbda = 10._dp
+real(dp), parameter, dimension(3) :: lmbda = 2._dp
 real(dp), parameter, dimension(3) :: beta = 1._dp
 real(dp), parameter, dimension(3) :: k = 10._dp
 real(dp), parameter, dimension(3) :: n = 2._dp
 real(dp), parameter, dimension(3) :: c = 0._dp
 integer, parameter, dimension(3,6) :: burst = &
-	reshape((/5, 0, 0, &
+	reshape((/1, 0, 0, &
 			-1, 0, 0, &
 			0, 1, 0, &
 			0, -1, 0, &
@@ -57,14 +57,12 @@ type(chaining_hashmap_type) :: map
 type(key_type) :: key
 type(key_type), allocatable :: keys(:)
 type(state_data) :: values
-class(*), allocatable :: retrieved_values
+class(*), allocatable :: retrieved
 logical :: conflict, key_exists
 
 
-
-! Initialize hashmap with 2^10 slots.
-! Hashmap will dynamically increase size if needed.
-call map%init(seeded_water_hasher, slots_bits=10)
+! Initialize hashmap
+call map%init(seeded_water_hasher)
 
 ! Initialize random seeding, and get random seed for output in metadata
 call random_seed(put=seed)
@@ -103,13 +101,12 @@ end do
 call map%get_all_keys(keys)
 
 ! Use retrieved keys and values to infer rates
-allocate(r_infer(size(keys),2))
+allocate(r_infer(size(keys),size(burst,dim=2)))
 do i = 1, size(keys)
-	call map%get_other_data(keys(i), retrieved_values)
-	select type (retrieved_values)
+	call map%get_other_data(keys(i), retrieved)
+	select type (retrieved)
 	type is (state_data)	
-		r_infer(i,1) = retrieved_values%exit_count(1) / retrieved_values%time_spent
-		r_infer(i,2) = retrieved_values%exit_count(2) / retrieved_values%time_spent
+		r_infer(i,:) = retrieved%exit_count(:) / retrieved%time_spent
 	end select
 end do
 
@@ -179,13 +176,13 @@ subroutine check_covariance_balance(n, cov, x_avg, r_avg, burst, change_method)
 	! Get fluxes
 	flux_avg = 0
 	do i = 1, n
-		do k = 1, size(r_avg)
-			if (burst(i,k) > 0) then
-				flux_avg(i,1) = flux_avg(i,1) + r_avg(k)*abs(burst(i,k))
-			elseif (burst(i,k) < 0) then
-				flux_avg(i,2) = flux_avg(i,2) + r_avg(k)*abs(burst(i,k))
-			end if
-		end do
+	do k = 1, size(r_avg)
+		if (burst(i,k) > 0) then
+			flux_avg(i,1) = flux_avg(i,1) + r_avg(k)*abs(burst(i,k))
+		elseif (burst(i,k) < 0) then
+			flux_avg(i,2) = flux_avg(i,2) + r_avg(k)*abs(burst(i,k))
+		end if
+	end do
 	end do
 	write(*,*) "flux: ", flux_avg
 	
@@ -205,7 +202,7 @@ subroutine check_covariance_balance(n, cov, x_avg, r_avg, burst, change_method)
 	end do
 	print *, s
 	
-	write(*,*) change_method, " relative change between U(i,j)+U(j,i) and D(i,j):"
+	write(*,*) change_method, " relative change between U(i,j)+U(j,i) and D(i,j) (D!=0):"
 	do i = 1, n
 	do j = 1, n
 		if (s(i,j) > eps) then
@@ -238,22 +235,10 @@ subroutine dump()
 	character(len=64) :: filename
 	character(len=20) :: headers(9)
 	integer :: i, fnum, io, ios
-	integer, allocatable :: test(:)
-
+	integer, allocatable :: state(:)
+	real(dp) :: r(6)
+	
 	print '("Number of keys in the hashmap = ", I0)', size(keys)
-
-!	do i = 1, size(keys)
-!		call set(key, [i-1])
-!		call map%get_other_data(key, retrieved_values)
-!		select type (retrieved_values)
-!		type is (state_data)
-!			print '("State ", I0, " = ", F20.12, " ", I0, " ", I0, " ", I0)', &
-!				i-1, retrieved_values%time_spent/t, retrieved_values%visit_count, retrieved_values%exit_count
-!			call get(keys(i), test)
-!			write(*,*) i, test
-!		end select		
-!	end do
-
 	
 	headers(1) = "x"
 	headers(2) = "probability"
@@ -305,21 +290,35 @@ subroutine dump()
 		
 !	do i = 1, size(keys)
 !!		call set(key, keys(i))
-!		call map%get_other_data(keys(i), retrieved_values)
-!		select type (retrieved_values)
+!		call map%get_other_data(keys(i), retrieved)
+!		select type (retrieved)
 !		type is (state_data)
 !			write(io,'(I20, G20.12, I20, I20, I20, G20.12, G20.12, G20.12, G20.12)') &
-!			i-1, &
-!			retrieved_values%time_spent/t, &
-!			retrieved_values%visit_count, &
-!			retrieved_values%exit_count(1), &
-!			retrieved_values%exit_count(2), &
-!			r_infer(i,1), &
-!			Rin(i-1), &
-!			r_infer(i,2), &
-!			Rout(i-1)
-!		end select
-!	end do
+	do i = 1, size(keys)
+	    call get(keys(i), state)
+	    r = rates(state)
+		call map%get_other_data(keys(i), retrieved)
+		select type (retrieved)
+		type is (state_data)
+			write(io,*) & 
+				state, &
+				retrieved%time_spent/t, &
+				retrieved%visit_count, &
+				r_infer(i,1), &
+				r(1), &
+				r_infer(i,2), &
+				r(2), &
+				r_infer(i,3), &
+				r(3), &
+				r_infer(i,4), &
+				r(4), &
+				r_infer(i,5), &
+				r(5), &
+				r_infer(i,6), &
+				r(6)
+		end select		
+	end do
+
 end subroutine
 
 
