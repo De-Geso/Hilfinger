@@ -83,13 +83,13 @@ call dump()
 write(*,*) "x mean:", x_mean
 write(*,*) "x covariance:", x_cov%get_cov()
 write(*,*) "r mean:", r_mean
-call check_covariance_balance(cov_balance%get_cov(), x_mean, r_mean, burst, "arithmetic")
+call check_covariance_balance_1D(cov_balance%get_cov(), x_mean, r_mean, burst, "arithmetic")
 
 
 contains
 
 
-subroutine check_covariance_balance(cov, x_avg, r_avg, burst, change_method)
+subroutine check_covariance_balance_1D(cov, x_avg, r_avg, burst, change_method)
 	character(len=*), intent(in) :: change_method
 	real(dp), intent(in) :: cov, x_avg, r_avg(2)
 	integer, intent(in) :: burst(2)

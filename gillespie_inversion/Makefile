@@ -85,7 +85,7 @@ $(SRC)/inversion_cascade_1D.o: $(MODOBJS) $(STDOBJS)
 
 # Module dependencies
 $(MODDIR)/randf.o: $(MODDIR)/kind_parameters.o
-$(MODDIR)/stochastics.o: $(MODDIR)/randf.o $(MODDIR)/kind_parameters.o
+$(MODDIR)/stochastics.o: $(MODDIR)/randf.o $(MODDIR)/kind_parameters.o $(MODDIR)/utilities.o
 $(MODDIR)/utilities.o: $(MODDIR)/kind_parameters.o
 
 # stdlib dependencies

@@ -1,6 +1,7 @@
 module stochastics
 use kind_parameters
 use randf
+use utilities
 implicit none
 public
 
@@ -18,6 +19,68 @@ end type OnlineCovariance
 
 
 contains
+
+
+subroutine check_covariance_balance(nx, nr, cov, x_avg, r_avg, burst, change_method)
+	real(dp), parameter :: eps=tiny(eps)
+	character(len=*), intent(in) :: change_method
+	real(dp), intent(in) :: cov(nx,nx), x_avg(nx), r_avg(nr)
+	integer, intent(in) :: nx, nr, burst(nx, nr)
+	real(dp) :: rel_change, U(nx, nx), D(nx, nx), tau(nx), s(nx,nx), flux_avg(nx,2)
+	integer :: i, j, k
+	
+		
+	! Get fluxes
+	flux_avg = 0
+	do i = 1, nx
+	do k = 1, nr
+		if (burst(i,k) > 0) then
+			flux_avg(i,1) = flux_avg(i,1) + r_avg(k)*abs(burst(i,k))
+		elseif (burst(i,k) < 0) then
+			flux_avg(i,2) = flux_avg(i,2) + r_avg(k)*abs(burst(i,k))
+		end if
+	end do
+	end do
+	write(*,*) "flux: ", flux_avg
+	
+	! Get lifetimes
+	tau = 1._dp * x_avg / flux_avg(:,2)
+	write(*,*) "tau: ", tau
+	
+	! Get step sizes
+	s = 0._dp
+	do i = 1, nx
+	do j = 1, nx
+	do k = 1, nr
+		s(i,j) = s(i,j) + (r_avg(k)*abs(burst(i,k))/sum(r_avg(:)*abs(burst(i,:))) &
+			* abs(burst(j,k)) * sign(1, burst(i,k)*burst(j,k)))
+	end do
+	end do
+	end do
+	
+	! Calculate diffusion and correlation matrices
+	do i = 1, nx
+	do j = 1, nx
+		U(i,j) = 1._dp/tau(j) * cov(i,j)/x_avg(i)/(0.5*(flux_avg(j,1)+flux_avg(j,2)))
+		D(i,j) = s(i,j)/tau(i)/x_avg(j) + s(j,i)/tau(j)/x_avg(i)
+	end do
+	end do
+	
+	! Output results
+	write(*,*) change_method, " relative change between U(i,j)+U(j,i) and D(i,j), or U(i,j) and -U(i,j) if D(i,j)==0:"
+	write(*,'(*(A20))') "D(ij)==0","i", "j", "Relative change", "U(ij)+U(ji)", "D(ij)"
+	do i = 1, nx
+	do j = 1, nx
+		if (D(i,j) > eps) then
+			rel_change = relative_change(U(i,j)+U(j,i), D(i,j), change_method)
+			write(*,'(A20,2(I20),3(G20.12))') "FALSE", i, j, rel_change, U(i,j)+U(j,i), D(i,j)
+		else
+			rel_change = relative_change(U(i,j), -U(j,i), change_method)
+			write(*,'(A20,2(I20),*(G20.12))') "TRUE", i, j, rel_change, U(i,j), -U(j,i)
+		end if
+	end do
+	end do
+end subroutine
 
 
 subroutine gillespie_iter(tstep, event, propensity)

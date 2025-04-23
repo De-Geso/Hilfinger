@@ -22,8 +22,9 @@ real(dp), parameter, dimension(n_species) :: beta = 1._dp
 real(dp), parameter, dimension(n_species) :: k = 10._dp
 real(dp), parameter, dimension(n_species) :: n = 2._dp
 real(dp), parameter, dimension(n_species) :: c = 0._dp
+! integer, parameter, dimension(n_species, n_reactions) :: burst = &
 integer, parameter, dimension(n_species, n_reactions) :: burst = &
-	reshape((/2, 0, 0, &
+	reshape((/1, 0, 0, &
 			-1, 0, 0, &
 			0, 1, 0, &
 			0, -1, 0, &
@@ -81,9 +82,9 @@ do while (minval(event_count) < event_min)
 	do i = 1, n_species
 		call online_x_cov(i)%update(real(x(i),dp), real(x(i),dp), tstep)
 		do j = 1, n_species
-			call online_cov_balance(i,j)%update(&
-				real(x(i),dp), &
-				abs(burst(j,2*j))*propensity(2*j) - abs(burst(j,j))*propensity(j), tstep)
+			call online_cov_balance(i,j) & 
+				%update(real(x(i),dp), &
+				abs(burst(j,2*j))*propensity(2*j) - abs(burst(j,2*j-1))*propensity(2*j-1), tstep)
 		end do
 	end do
 	
@@ -110,7 +111,7 @@ do i = 1, size(keys)
 	end select
 end do
 
-! Stats stuff for validity of simulation, i.e. check covariance balance
+! Stats for simulation sampling, i.e. check covariance balance
 x_mean = online_x_cov%mean_x
 r_mean = event_count/t
 do i = 1, n_species
@@ -166,67 +167,6 @@ subroutine update_hashmap(this, key, dt, r_channel)
 end subroutine
 
 
-subroutine check_covariance_balance(nx, nr, cov, x_avg, r_avg, burst, change_method)
-	character(len=*), intent(in) :: change_method
-	real(dp), intent(in) :: cov(nx,nx), x_avg(nx), r_avg(nr)
-	integer, intent(in) :: nx, nr, burst(nx, nr)
-	real(dp) :: rel_change, U(nx, nx), D(nx, nx), tau(nx), s(nx,nx), flux_avg(nx,2)
-	integer :: i, j, k
-	
-		
-	! Get fluxes
-	flux_avg = 0
-	do i = 1, nx
-	do k = 1, nr
-		if (burst(i,k) > 0) then
-			flux_avg(i,1) = flux_avg(i,1) + r_avg(k)*abs(burst(i,k))
-		elseif (burst(i,k) < 0) then
-			flux_avg(i,2) = flux_avg(i,2) + r_avg(k)*abs(burst(i,k))
-		end if
-	end do
-	end do
-	write(*,*) "flux: ", flux_avg
-	
-	! Get lifetimes
-	tau = 1._dp * x_avg / flux_avg(:,2)
-	write(*,*) "tau: ", tau
-	
-	! Get step sizes
-	s = 0._dp
-	do i = 1, nx
-	do j = 1, nx
-	do k = 1, nr
-		s(i,j) = s(i,j) + (r_avg(k)*abs(burst(i,k))/sum(r_avg(:)*abs(burst(i,:))) &
-			* abs(burst(j,k)) * sign(1, burst(i,k)*burst(j,k)))
-	end do
-	end do
-	end do
-	
-	! Calculate diffusion and correlation matrices
-	do i = 1, nx
-	do j = 1, nx
-		U(i,j) = 1._dp/tau(j) * cov(i,j)/(x_avg(i)*0.5*(flux_avg(j,1)+flux_avg(j,2)))
-		D(i,j) = s(i,j)/tau(i)/x_avg(j) + s(j,i)/tau(j)/x_avg(i)
-	end do
-	end do
-	
-	! Output results
-	write(*,*) change_method, " relative change between U(i,j)+U(j,i) and D(i,j) (D!=0):"
-	write(*,'(*(A20))') "i", "j", "Relative change", "U+U^T", "D"
-	do i = 1, nx
-	do j = 1, nx
-		if (D(i,j) > eps) then
-			rel_change = relative_change(U(i,j)+U(j,i), D(i,j), change_method)
-			write(*,'(2(I20),3(G20.12))') i, j, rel_change, U(i,j)+U(j,i), D(i,j)
-		else
-			rel_change = relative_change(U(i,j), -U(j,i), change_method)
-			write(*,'(2(I20),*(G20.12))') i, j, rel_change, U(i,j), -U(j,i), 0.5*(flux_avg(j,1)+flux_avg(j,2))
-		end if
-	end do
-	end do
-end subroutine
-
-
 pure function rates(x) result(r)
 	integer, intent(in) :: x(n_species)
 	real(dp) :: r(n_reactions)
@@ -234,10 +174,10 @@ pure function rates(x) result(r)
 	r(1) = 1._dp * lmbda(1)
 	r(2) = 1._dp * x(1) * beta(1)
 	
-	r(3) = 1._dp * lmbda(2)
+	r(3) = 1._dp * lmbda(2) * x(1)
 	r(4) = 1._dp * x(2) * beta(2)
 	
-	r(5) = 1._dp * lmbda(3)
+	r(5) = 1._dp * lmbda(3) * x(2)
 	r(6) = 1._dp * x(3) * beta(3)
 end function
 
