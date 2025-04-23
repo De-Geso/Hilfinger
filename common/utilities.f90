@@ -129,4 +129,25 @@ function linspace(start,end,num,endpoint,step) result(samples)
 	end do
 end function linspace
 
+
+logical function lex_less_than(a, b)
+	integer :: a(:), b(:)
+	integer :: i, n
+    
+	n = min(size(a), size(b))
+	do i = 1, n
+		if (a(i) < b(i)) then
+			lex_less_than = .true.
+			return
+		elseif (a(i) > b(i)) then
+			lex_less_than = .false.
+			return
+		end if
+	end do
+	
+	! If equal up to min length, shorter one is considered smaller
+	lex_less_than = size(a) < size(b)
+end function
+
+
 end module

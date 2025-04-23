@@ -89,7 +89,7 @@ do while (minval(event_count) < event_min)
 	end do
 	
 	! Update hashmap
-	call set(key, [x])
+	call set(key, x)
 	call update_hashmap(map, key, tstep, event)
 	
 	! Update state of system for next step
@@ -100,6 +100,7 @@ end do
 
 ! Get all the keys (states visited)
 call map%get_all_keys(keys)
+call sort_keys(keys)
 
 ! Use retrieved keys and values to infer rates
 allocate(r_infer(size(keys), n_reactions))
@@ -164,6 +165,69 @@ subroutine update_hashmap(this, key, dt, r_channel)
 		new%exit_count(event) = 1
 		call this%map_entry(key, new, conflict)
 	end if
+end subroutine
+
+subroutine sort_keys(keys)
+	type(key_type), intent(inout) :: keys(:)
+	if (size(keys) > 1) then
+		call quicksort_keys(keys, 1, size(keys))
+	end if
+end subroutine
+
+
+logical function lex_less_than_keys(a, b)
+    use iso_fortran_env, only: int8
+    type(key_type), intent(in) :: a, b
+    integer :: i, n
+
+    n = min(size(a%value), size(b%value))
+    do i = 1, n
+        if (a%value(i) < b%value(i)) then
+            lex_less_than_keys = .true.
+            return
+        elseif (a%value(i) > b%value(i)) then
+            lex_less_than_keys = .false.
+            return
+        end if
+    end do
+
+    ! If equal so far, shorter key is "less"
+    lex_less_than_keys = size(a%value) < size(b%value)
+end function
+
+
+
+subroutine quicksort_keys(keys, left, right)
+	type(key_type), intent(inout) :: keys(:)
+	integer, intent(in) :: left, right
+	integer :: i, j
+	type(key_type) :: pivot, temp
+	
+	if (left >= right) return
+	
+	pivot = keys((left + right) / 2)
+	i = left
+	j = right
+
+	do
+		do while (lex_less_than_keys(keys(i), pivot))
+			i = i + 1
+		end do
+		do while (lex_less_than_keys(pivot, keys(j)))
+			j = j - 1
+		end do
+		if (i <= j) then
+			temp = keys(i)
+			keys(i) = keys(j)
+			keys(j) = temp
+			i = i + 1
+			j = j - 1
+		end if
+		if (i > j) exit
+	end do
+
+	call quicksort_keys(keys, left, j)
+	call quicksort_keys(keys, i, right)
 end subroutine
 
 
