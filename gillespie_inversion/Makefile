@@ -40,11 +40,11 @@ STDS := stdlib_kinds.f90 \
 
 PROGS := inversion_cascade_1D.f90 \
 	inversion_cascade_3D.f90 \
-	read_binary.f90
+	read_binary.f90 \
+	trace_cascade_2.f90
 	# single_path_3D.f90 \
 	# single_path_3D_discrete.f90 \
         # cascade_2_benchmark.f90 \
-        # trace_cascade_2.f90
 
 MODOBJS := $(MODS:%.f90=$(MODDIR)/%.o)
 STDOBJS := $(STDS:%.f90=$(STDDIR)/%.o)
@@ -79,9 +79,13 @@ inversion_cascade_3D: $(MODOBJS) $(STDOBJS) src/inversion_cascade_3D.o
 read_binary: $(MODOBJS) $(SRC)/read_binary.o
 	$(FC) $(FFLAGS) -o $@ $^
 
+trace_cascade_2: $(MODOBJS) $(SRC)/trace_cascade_2.o
+	$(FC) $(FFLAGS) -o $@ $^
+
 # Program dependencies (ensure all the necessary .o files are there before trying to link)
 $(SRC)/read_binary.o:
 $(SRC)/inversion_cascade_1D.o: $(MODOBJS) $(STDOBJS)
+$(SRC)/trace_cascade_2.o: $(MODOBJS) $(STDOBJS)
 
 # Module dependencies
 $(MODDIR)/randf.o: $(MODDIR)/kind_parameters.o

@@ -9,7 +9,7 @@ use stdlib_hashmap_wrappers, only: key_type, set, get, &
 implicit none
 
 character(len=*), parameter :: fpath = "data/"
-character(len=*), parameter :: fname = "dimer_3D"
+character(len=*), parameter :: fname = "3D_oscillating"
 
 real(dp), parameter :: eps=tiny(eps)
 
@@ -17,19 +17,19 @@ integer, parameter :: event_min = 10**6
 
 ! System parameters ====================================================
 integer, parameter :: n_species = 3, n_reactions = 6
-real(dp), parameter, dimension(n_species) :: lmbda = 2._dp
-real(dp), parameter, dimension(n_species) :: beta = 1._dp
-real(dp), parameter, dimension(n_species) :: k = 10._dp
-real(dp), parameter, dimension(n_species) :: n = 2._dp
-real(dp), parameter, dimension(n_species) :: c = 0._dp
-! integer, parameter, dimension(n_species, n_reactions) :: burst = &
-integer, parameter, dimension(n_species, n_reactions) :: burst = &
-	reshape((/1, 0, 0, &
-			-1, 0, 0, &
-			0, 1, 0, &
-			0, -1, 0, &
-			0, 0, 1, &
-			0, 0, -1/), shape(burst))
+real(dp), parameter, dimension(n_species) :: lmbda = [500._dp, 80._dp, 80._dp]
+real(dp), parameter, dimension(n_species) :: beta = [1._dp, 1._dp, 1._dp]
+real(dp), parameter, dimension(n_species) :: k = [0.1_dp, 100._dp, 40._dp]
+real(dp), parameter, dimension(n_species) :: n = [-10._dp, 1._dp, 2._dp]
+real(dp), parameter, dimension(n_species) :: c = [0._dp, 0._dp, 0._dp]
+integer, parameter, dimension(n_species, n_reactions) :: burst = reshape( &
+	(/1, 0, 0, & ! Reaction 1
+	-1, 0, 0, &
+	0, 1, 0, &
+	0, -1, 0, &
+	0, 0, 1, &
+	0, 0, -1/), & ! Reaction n
+	shape(burst))
 
 ! Variables ============================================================
 ! Timers and counters
@@ -49,15 +49,15 @@ integer :: i, j, nseed
 integer, allocatable :: rseed(:)
 
 ! Hashmap ==============================================================
-type :: state_data
+type :: state_exits
 	real(dp) :: time_spent
 	integer :: visit_count
 	integer :: exit_count(n_reactions)
-end type state_data
+end type state_exits
 type(chaining_hashmap_type) :: map
 type(key_type) :: key
 type(key_type), allocatable :: keys(:)
-type(state_data) :: values
+type(state_exits) :: values
 class(*), allocatable :: retrieved
 logical :: conflict, key_exists
 
@@ -107,7 +107,7 @@ allocate(r_infer(size(keys), n_reactions))
 do i = 1, size(keys)
 	call map%get_other_data(keys(i), retrieved)
 	select type (retrieved)
-	type is (state_data)	
+	type is (state_exits)	
 		r_infer(i,:) = retrieved%exit_count(:) / retrieved%time_spent
 	end select
 end do
@@ -133,6 +133,23 @@ call dump()
 contains
 
 
+pure function rates(x) result(r)
+	integer, intent(in) :: x(n_species)
+	real(dp) :: r(n_reactions)
+	
+	! Oscillating
+	r(1) = 1._dp * lmbda(1) * hill(real(x(3), dp), k(1), n(1), c(1))
+	r(3) = 1._dp * lmbda(2) * hill(real(x(1), dp), k(2), n(2), c(2))
+
+	! f_3(x_2) doesn't change
+	r(5) = 1._dp * lmbda(3) * hill(real(x(2), dp), k(3), n(3), c(3))
+	! Linear decay doesn't change
+	r(2) = 1._dp * x(1) * beta(1)
+	r(4) = 1._dp * x(2) * beta(2)
+	r(6) = 1._dp * x(3) * beta(3)
+end function
+
+
 subroutine update_hashmap(this, key, dt, r_channel)
 ! Put a new entry into the hashmap, or update an entry if it already exists
 ! Would love to make this general, but the derived type makes this difficult
@@ -140,7 +157,7 @@ subroutine update_hashmap(this, key, dt, r_channel)
 	type(key_type), intent(in) :: key
 	real(dp), intent(in) :: dt
 	integer, intent(in) :: r_channel
-	type(state_data) :: new
+	type(state_exits) :: new
 	class(*), allocatable :: other
 	logical :: key_exists
 	
@@ -151,7 +168,7 @@ subroutine update_hashmap(this, key, dt, r_channel)
 	! other is polymorphic, so need to set type to work with it
 		call this%get_other_data(key, other)
 		select type (other)
-		type is (state_data)
+		type is (state_exits)
 			other%time_spent = other%time_spent + dt
 			other%visit_count = other%visit_count + 1
 			other%exit_count(event) = other%exit_count(r_channel) + 1
@@ -167,6 +184,7 @@ subroutine update_hashmap(this, key, dt, r_channel)
 	end if
 end subroutine
 
+
 subroutine sort_keys(keys)
 	type(key_type), intent(inout) :: keys(:)
 	if (size(keys) > 1) then
@@ -175,46 +193,29 @@ subroutine sort_keys(keys)
 end subroutine
 
 
-logical function lex_less_than_keys(a, b)
-    use iso_fortran_env, only: int8
-    type(key_type), intent(in) :: a, b
-    integer :: i, n
-
-    n = min(size(a%value), size(b%value))
-    do i = 1, n
-        if (a%value(i) < b%value(i)) then
-            lex_less_than_keys = .true.
-            return
-        elseif (a%value(i) > b%value(i)) then
-            lex_less_than_keys = .false.
-            return
-        end if
-    end do
-
-    ! If equal so far, shorter key is "less"
-    lex_less_than_keys = size(a%value) < size(b%value)
-end function
-
-
-
 subroutine quicksort_keys(keys, left, right)
 	type(key_type), intent(inout) :: keys(:)
 	integer, intent(in) :: left, right
 	integer :: i, j
-	type(key_type) :: pivot, temp
-	
+	type(key_type) :: temp
+	integer, allocatable :: pivot(:), key_val(:)
+		
 	if (left >= right) return
 	
-	pivot = keys((left + right) / 2)
+	call get(keys((left + right) / 2), pivot)
 	i = left
 	j = right
 
 	do
-		do while (lex_less_than_keys(keys(i), pivot))
+		call get(keys(i), key_val)
+		do while (lex_less_than(key_val, pivot))
 			i = i + 1
+			call get(keys(i), key_val)
 		end do
-		do while (lex_less_than_keys(pivot, keys(j)))
+		call get(keys(j), key_val)
+		do while (lex_less_than(pivot, key_val))
 			j = j - 1
+			call get(keys(j), key_val)
 		end do
 		if (i <= j) then
 			temp = keys(i)
@@ -231,53 +232,51 @@ subroutine quicksort_keys(keys, left, right)
 end subroutine
 
 
-pure function rates(x) result(r)
-	integer, intent(in) :: x(n_species)
-	real(dp) :: r(n_reactions)
-	
-	r(1) = 1._dp * lmbda(1)
-	r(2) = 1._dp * x(1) * beta(1)
-	
-	r(3) = 1._dp * lmbda(2) * x(1)
-	r(4) = 1._dp * x(2) * beta(2)
-	
-	r(5) = 1._dp * lmbda(3) * x(2)
-	r(6) = 1._dp * x(3) * beta(3)
-end function
-
-
 subroutine dump()
-	character(len=64) :: filename
-	character(len=20) :: headers(17)
+	character(len=64) :: fname_rates, fname_exits
+	character(len=20) :: headers_rates(17), headers_exits(11)
 	integer :: i, fnum, io, ios
 	integer, allocatable :: state(:)
 	real(dp) :: r(6)
 	
 	print '("Number of keys in the hashmap = ", I0)', size(keys)
 	
-	headers(1) = "x1"
-	headers(2) = "x2"
-	headers(3) = "x3"
-	headers(4) = "visits"
-	headers(5) = "probability"
-	headers(6) = "r1_inf"
-	headers(7) = "r1_true"
-	headers(8) = "r2_inf"
-	headers(9) = "r2_true"
-	headers(10) = "r3_inf"
-	headers(11) = "r3_true"
-	headers(12) = "r4_inf"
-	headers(13) = "r4_true"
-	headers(14) = "r5_inf"
-	headers(15) = "r5_true"
-	headers(16) = "r6_inf"
-	headers(17) = "r6_true"
+	headers_rates(1) = "x1"
+	headers_rates(2) = "x2"
+	headers_rates(3) = "x3"
+	headers_rates(4) = "visits"
+	headers_rates(5) = "probability"
+	headers_rates(6) = "r1_inf"
+	headers_rates(7) = "r1_true"
+	headers_rates(8) = "r2_inf"
+	headers_rates(9) = "r2_true"
+	headers_rates(10) = "r3_inf"
+	headers_rates(11) = "r3_true"
+	headers_rates(12) = "r4_inf"
+	headers_rates(13) = "r4_true"
+	headers_rates(14) = "r5_inf"
+	headers_rates(15) = "r5_true"
+	headers_rates(16) = "r6_inf"
+	headers_rates(17) = "r6_true"
 	
-	call generate_ISO_filename(fpath, fname, ".dat", filename)
+	headers_exits(1) = "x1"
+	headers_exits(2) = "x2"
+	headers_exits(3) = "x3"
+	headers_exits(4) = "visits"
+	headers_exits(5) = "probability"
+	headers_exits(6) = "exits1"
+	headers_exits(7) = "exits2"
+	headers_exits(8) = "exits3"
+	headers_exits(9) = "exits4"
+	headers_exits(10) = "exits5"
+	headers_exits(11) = "exits6"
 	
-	open(io, file=trim(filename), status="replace", action="write")
-	write(*,*) "Output at: ", filename
-	
+	call generate_ISO_filename(fpath, trim(fname)//"_rates", ".dat", fname_rates)
+	call generate_ISO_filename(fpath, trim(fname)//"_exits", ".dat", fname_exits)
+	write(*,*) "Output at: ", fname_rates, fname_exits
+
+	! Write rate file
+	open(io, file=fname_rates, status="replace", action="write")
 	! Write metadata
 	write(io,*) "# Program Metadata"
 	write(io,*) "# Program: inversion_cascade_3D.f90"
@@ -286,10 +285,11 @@ subroutine dump()
 	write(io,*) "# Min events: ", event_min
 	write(io,*) "# n_species: ", n_species
 	write(io,*) "# n_reactions: ", n_reactions
+	write(io,*) "# time: ", t
 	write(io,*) ""
 	write(io,*) ""
 	write(io,*) "# Parameter Metadata"
-	write(io,*) "# Burst: ", burst
+	write(io,*) "# burst: ", burst
 	write(io,*) "# lmbda: ", lmbda
 	write(io,*) "# k: ", k
 	write(io,*) "# n: ", n
@@ -301,32 +301,32 @@ subroutine dump()
 	write(io,*) ""
 	write(io,*) "# Data"
 	
-	! Write headers	
-	write(io, '(17(A20))') trim(headers(1)), &
-		trim(headers(2)), &
-		trim(headers(3)), &
-		trim(headers(4)), &
-		trim(headers(5)), &
-		trim(headers(6)), &
-		trim(headers(7)), &
-		trim(headers(8)), &
-		trim(headers(9)), &
-		trim(headers(10)), &
-		trim(headers(11)), &
-		trim(headers(12)), &
-		trim(headers(13)), &
-		trim(headers(14)), &
-		trim(headers(15)), &
-		trim(headers(16)), &
-		trim(headers(17))
+	! Write rates headers
+	write(io, '(17(A20))') trim(headers_rates(1)), &
+		trim(headers_rates(2)), &
+		trim(headers_rates(3)), &
+		trim(headers_rates(4)), &
+		trim(headers_rates(5)), &
+		trim(headers_rates(6)), &
+		trim(headers_rates(7)), &
+		trim(headers_rates(8)), &
+		trim(headers_rates(9)), &
+		trim(headers_rates(10)), &
+		trim(headers_rates(11)), &
+		trim(headers_rates(12)), &
+		trim(headers_rates(13)), &
+		trim(headers_rates(14)), &
+		trim(headers_rates(15)), &
+		trim(headers_rates(16)), &
+		trim(headers_rates(17))
 		
 	do i = 1, size(keys)
 	    call get(keys(i), state)
 	    r = rates(state)
 		call map%get_other_data(keys(i), retrieved)
 		select type (retrieved)
-		type is (state_data)
-			write(io,'(4(I20), 13(G20.12))') & 
+		type is (state_exits)
+			write(io,'(4(I20), 13(ES20.12))') & 
 				state, &
 				retrieved%visit_count, &
 				retrieved%time_spent/t, &
@@ -344,6 +344,67 @@ subroutine dump()
 				r(6)
 		end select		
 	end do
+	close(io)
+	
+	! Write exits file
+	open(io, file=fname_exits, status="replace", action="write")
+	! Write metadata
+	write(io,*) "# Program Metadata"
+	write(io,*) "# Program: inversion_cascade_3D.f90"
+	write(io,*) "# Creation date: ", fdate()
+	write(io,*) "# Seed: ", rseed
+	write(io,*) "# Min events: ", event_min
+	write(io,*) "# n_species: ", n_species
+	write(io,*) "# n_reactions: ", n_reactions
+	write(io,*) "# time: ", t
+	write(io,*) ""
+	write(io,*) ""
+	write(io,*) "# Parameter Metadata"
+	write(io,*) "# burst: ", burst
+	write(io,*) "# lmbda: ", lmbda
+	write(io,*) "# k: ", k
+	write(io,*) "# n: ", n
+	write(io,*) "# c: ", c
+	write(io,*) "# beta: ", beta
+	write(io,*) "# x_mean: ", x_mean
+	write(io,*) "# r_mean: ", r_mean
+	write(io,*) ""
+	write(io,*) ""
+	write(io,*) "# Data"
+	
+	! Write exits headers
+	write(io, '(17(A20))') trim(headers_exits(1)), &
+		trim(headers_exits(2)), &
+		trim(headers_exits(3)), &
+		trim(headers_exits(4)), &
+		trim(headers_exits(5)), &
+		trim(headers_exits(6)), &
+		trim(headers_exits(7)), &
+		trim(headers_exits(8)), &
+		trim(headers_exits(9)), &
+		trim(headers_exits(10)), &
+		trim(headers_exits(11))
+				
+	do i = 1, size(keys)
+	    call get(keys(i), state)
+	    r = rates(state)
+		call map%get_other_data(keys(i), retrieved)
+		select type (retrieved)
+		type is (state_exits)
+			write(io,'(4(I20), ES20.12, 6(I20))') & 
+				state, &
+				retrieved%visit_count, &
+				retrieved%time_spent/t, &
+				retrieved%exit_count(1), &
+				retrieved%exit_count(2), &
+				retrieved%exit_count(3), &
+				retrieved%exit_count(4), &
+				retrieved%exit_count(5), &
+				retrieved%exit_count(6)
+		end select		
+	end do
+	close(io)
+
 end subroutine
 
 

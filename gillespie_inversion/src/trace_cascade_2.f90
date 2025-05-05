@@ -8,17 +8,17 @@ character(len=*), parameter :: prefix = "trace_cascade_2D_"
 
 real(dp), parameter :: eps=tiny(eps)
 
-integer, parameter :: event_min = 10**6
+integer, parameter :: event_min = 10**4
 integer, parameter :: abund_max(2) = [64, 64]
 
 ! System parameters ====================================================
-real(dp), parameter :: lmbda(2) = [2._dp, 2._dp]
+real(dp), parameter :: lmbda(2) = [10._dp, 1._dp]
 real(dp), parameter :: tau(2) = [1._dp, 1._dp]
 real(dp), parameter :: k(2) = 10._dp
 real(dp), parameter :: n(2) = 2._dp
 real(dp), parameter :: c(2) = 0._dp
 integer, parameter, dimension(2, 4) :: abund_update = &
-	reshape((/1, 0, &
+	reshape((/2, 0, &
 			-1, 0, &
 			0, 1, &
 			0, -1 &
@@ -38,6 +38,10 @@ integer :: x(2)=0, maxX(2)=0, event_count(4)=0, event
 integer :: i, nseed
 integer, allocatable :: rseed(:)
 
+real(dp), parameter :: tdisc = 0.001_dp
+real(dp) :: tlast = 0._dp
+integer :: xlast(2), tcount
+
 
 ! Here the program begins ==============================================
 
@@ -47,7 +51,9 @@ call random_seed(put=seed)
 call random_seed(size=nseed)
 allocate(rseed(nseed))
 call random_seed(get=rseed)
-		
+
+xlast = x
+
 do while (minval(event_count) < event_min)
 	do i = 1, size(x)
 		if (x(i) .eq. abund_max(i)) then
@@ -67,6 +73,12 @@ do while (minval(event_count) < event_min)
 	
 	! Update time by adding how long we were in the previous state
 	t = t + tstep
+	do i = 1, floor((t-tlast)/tdisc)
+		tcount = tcount + 1
+		tlast = 1._dp * tdisc * tcount
+		write(10,*) tlast, x-xlast
+		xlast = x
+	end do
 	
 	! Update online mean
 	deltaX = x - meanX

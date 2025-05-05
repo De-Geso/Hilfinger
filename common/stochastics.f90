@@ -239,7 +239,7 @@ end function get_covariance
 
 pure function hill(x, k, n, c) result(f)
 ! Hill function. n<0 for negative hill function, n>0 for positive.
-	real, intent(in) :: x
+	real(dp), intent(in) :: x
 	real(dp), intent(in) :: k, n, c
 	real(dp) :: f
 	
