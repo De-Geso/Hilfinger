@@ -3,6 +3,7 @@ use kind_parameters
 use stochastics
 use randf
 use utilities
+use hashmap_utilities
 use stdlib_hashmaps, only: chaining_hashmap_type, int_calls
 use stdlib_hashmap_wrappers, only: key_type, set, get, &
 	seeded_water_hasher
@@ -34,8 +35,6 @@ integer, parameter, dimension(n_species, n_reactions) :: burst = reshape( &
 ! Variables ============================================================
 ! Timers and counters
 real(dp) :: t=0._dp, tstep
-integer, allocatable :: visits(:)
-integer, allocatable :: exits(:,:)
 ! Stats/calculated
 real(dp), allocatable :: r_infer(:,:)
 type(OnlineCovariance) :: online_cov_balance(n_species, n_species), online_x_cov(n_species)
@@ -49,11 +48,11 @@ integer :: i, j, nseed
 integer, allocatable :: rseed(:)
 
 ! Hashmap ==============================================================
-type :: state_exits
-	real(dp) :: time_spent
-	integer :: visit_count
-	integer :: exit_count(n_reactions)
-end type state_exits
+!type :: state_exits
+!	real(dp) :: time_spent
+!	integer :: visit_count
+!	integer :: exit_count(10*n_reactions)
+!end type state_exits
 type(chaining_hashmap_type) :: map
 type(key_type) :: key
 type(key_type), allocatable :: keys(:)
@@ -108,7 +107,7 @@ do i = 1, size(keys)
 	call map%get_other_data(keys(i), retrieved)
 	select type (retrieved)
 	type is (state_exits)	
-		r_infer(i,:) = retrieved%exit_count(:) / retrieved%time_spent
+!		r_infer(i,:) = retrieved%exit_count(:) / retrieved%time_spent
 	end select
 end do
 
@@ -150,86 +149,86 @@ pure function rates(x) result(r)
 end function
 
 
-subroutine update_hashmap(this, key, dt, r_channel)
-! Put a new entry into the hashmap, or update an entry if it already exists
-! Would love to make this general, but the derived type makes this difficult
-	type(chaining_hashmap_type), intent(inout) :: this
-	type(key_type), intent(in) :: key
-	real(dp), intent(in) :: dt
-	integer, intent(in) :: r_channel
-	type(state_exits) :: new
-	class(*), allocatable :: other
-	logical :: key_exists
+!subroutine update_hashmap(this, key, dt, r_channel)
+!! Put a new entry into the hashmap, or update an entry if it already exists
+!! Would love to make this general, but the derived type makes this difficult
+!	type(chaining_hashmap_type), intent(inout) :: this
+!	type(key_type), intent(in) :: key
+!	real(dp), intent(in) :: dt
+!	integer, intent(in) :: r_channel
+!	type(state_exits) :: new
+!	class(*), allocatable :: other
+!	logical :: key_exists
 	
-	! Check key existence
-	call this%key_test(key, key_exists)
-	! If exists, update entry
-	if (key_exists) then
-	! other is polymorphic, so need to set type to work with it
-		call this%get_other_data(key, other)
-		select type (other)
-		type is (state_exits)
-			other%time_spent = other%time_spent + dt
-			other%visit_count = other%visit_count + 1
-			other%exit_count(event) = other%exit_count(r_channel) + 1
-			call this%set_other_data(key, other)
-		end select		
-	! If doesn't exists, initialize new entry
-	else
-		new%time_spent = tstep
-		new%visit_count = 1
-		new%exit_count = 0
-		new%exit_count(event) = 1
-		call this%map_entry(key, new, conflict)
-	end if
-end subroutine
+!	! Check key existence
+!	call this%key_test(key, key_exists)
+!	! If exists, update entry
+!	if (key_exists) then
+!	! other is polymorphic, so need to set type to work with it
+!		call this%get_other_data(key, other)
+!		select type (other)
+!		type is (state_exits)
+!			other%time_spent = other%time_spent + dt
+!			other%visit_count = other%visit_count + 1
+!			other%exit_count(event) = other%exit_count(r_channel) + 1
+!			call this%set_other_data(key, other)
+!		end select		
+!	! If doesn't exists, initialize new entry
+!	else
+!		new%time_spent = tstep
+!		new%visit_count = 1
+!		new%exit_count = 0
+!		new%exit_count(event) = 1
+!		call this%map_entry(key, new, conflict)
+!	end if
+!end subroutine
 
 
-subroutine sort_keys(keys)
-	type(key_type), intent(inout) :: keys(:)
-	if (size(keys) > 1) then
-		call quicksort_keys(keys, 1, size(keys))
-	end if
-end subroutine
+!subroutine sort_keys(keys)
+!	type(key_type), intent(inout) :: keys(:)
+!	if (size(keys) > 1) then
+!		call quicksort_keys(keys, 1, size(keys))
+!	end if
+!end subroutine
 
 
-subroutine quicksort_keys(keys, left, right)
-	type(key_type), intent(inout) :: keys(:)
-	integer, intent(in) :: left, right
-	integer :: i, j
-	type(key_type) :: temp
-	integer, allocatable :: pivot(:), key_val(:)
+!subroutine quicksort_keys(keys, left, right)
+!	type(key_type), intent(inout) :: keys(:)
+!	integer, intent(in) :: left, right
+!	integer :: i, j
+!	type(key_type) :: temp
+!	integer, allocatable :: pivot(:), key_val(:)
 		
-	if (left >= right) return
+!	if (left >= right) return
 	
-	call get(keys((left + right) / 2), pivot)
-	i = left
-	j = right
+!	call get(keys((left + right) / 2), pivot)
+!	i = left
+!	j = right
 
-	do
-		call get(keys(i), key_val)
-		do while (lex_less_than(key_val, pivot))
-			i = i + 1
-			call get(keys(i), key_val)
-		end do
-		call get(keys(j), key_val)
-		do while (lex_less_than(pivot, key_val))
-			j = j - 1
-			call get(keys(j), key_val)
-		end do
-		if (i <= j) then
-			temp = keys(i)
-			keys(i) = keys(j)
-			keys(j) = temp
-			i = i + 1
-			j = j - 1
-		end if
-		if (i > j) exit
-	end do
+!	do
+!		call get(keys(i), key_val)
+!		do while (lex_less_than(key_val, pivot))
+!			i = i + 1
+!			call get(keys(i), key_val)
+!		end do
+!		call get(keys(j), key_val)
+!		do while (lex_less_than(pivot, key_val))
+!			j = j - 1
+!			call get(keys(j), key_val)
+!		end do
+!		if (i <= j) then
+!			temp = keys(i)
+!			keys(i) = keys(j)
+!			keys(j) = temp
+!			i = i + 1
+!			j = j - 1
+!		end if
+!		if (i > j) exit
+!	end do
 
-	call quicksort_keys(keys, left, j)
-	call quicksort_keys(keys, i, right)
-end subroutine
+!	call quicksort_keys(keys, left, j)
+!	call quicksort_keys(keys, i, right)
+!end subroutine
 
 
 subroutine dump()

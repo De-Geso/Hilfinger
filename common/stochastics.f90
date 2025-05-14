@@ -21,6 +21,26 @@ end type OnlineCovariance
 contains
 
 
+pure function flux(rates, bursts, nr, nx) result(f)
+! Calculate fluxes for each component, given all rates and burst sizes.
+	real(dp), intent(in) :: rates(nr)
+	integer, intent(in) :: bursts(nx,nr), nr, nx
+	real(dp) :: f(nx, 2)
+	integer i, k
+	
+	f = 0
+	do i = 1, nx
+	do k = 1, nr
+		if (bursts(i,k) > 0) then
+			f(i,1) = f(i,1) + rates(k)*abs(bursts(i,k))
+		elseif (bursts(i,k) < 0) then
+			f(i,2) = f(i,2) + rates(k)*abs(bursts(i,k))
+		end if
+	end do
+	end do
+end function flux
+
+
 subroutine check_covariance_balance(nx, nr, cov, x_avg, r_avg, burst, change_method)
 	real(dp), parameter :: eps=tiny(eps)
 	character(len=*), intent(in) :: change_method
@@ -28,19 +48,9 @@ subroutine check_covariance_balance(nx, nr, cov, x_avg, r_avg, burst, change_met
 	integer, intent(in) :: nx, nr, burst(nx, nr)
 	real(dp) :: rel_change, U(nx, nx), D(nx, nx), tau(nx), s(nx,nx), flux_avg(nx,2)
 	integer :: i, j, k
-	
-		
+			
 	! Get fluxes
-	flux_avg = 0
-	do i = 1, nx
-	do k = 1, nr
-		if (burst(i,k) > 0) then
-			flux_avg(i,1) = flux_avg(i,1) + r_avg(k)*abs(burst(i,k))
-		elseif (burst(i,k) < 0) then
-			flux_avg(i,2) = flux_avg(i,2) + r_avg(k)*abs(burst(i,k))
-		end if
-	end do
-	end do
+	flux_avg = flux(r_avg, burst, nr, nx)
 	write(*,*) "flux: ", flux_avg
 	
 	! Get lifetimes

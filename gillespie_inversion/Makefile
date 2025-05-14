@@ -36,12 +36,13 @@ STDS := stdlib_kinds.f90 \
 	stdlib_hashmap_open.f90 \
 	stdlib_hash_32bit_fnv.f90 \
 	stdlib_hash_32bit_nm.f90 \
-	stdlib_hash_32bit_water.f90
+	stdlib_hash_32bit_water.f90 \
+	hashmap_utilities.f90 # Not stdlib, but will only ever be used by programs using stdlib
 
 PROGS := inversion_cascade_1D.f90 \
 	inversion_cascade_3D.f90 \
 	read_binary.f90 \
-	trace_cascade_2.f90
+	inversion_cascade_2D.f90
 	# single_path_3D.f90 \
 	# single_path_3D_discrete.f90 \
         # cascade_2_benchmark.f90 \
@@ -70,27 +71,29 @@ $(SRC)/%.o: $(SRC)/%.f90 $(MODOBJS)
 # All targets
 all: $(TARGETS)
 
-inversion_cascade_1D: $(MODOBJS) src/inversion_cascade_1D.o
+inversion_cascade_1D: $(MODOBJS) $(SRC)/inversion_cascade_1D.o
 	$(FC) $(FFLAGS) -o $@ $^
 
-inversion_cascade_3D: $(MODOBJS) $(STDOBJS) src/inversion_cascade_3D.o
+inversion_cascade_2D: $(MODOBJS) $(STDOBJS) $(SRC)/inversion_cascade_2D.o
+	$(FC) $(FFLAGS) -o $@ $^
+
+inversion_cascade_3D: $(MODOBJS) $(STDOBJS) $(SRC)/inversion_cascade_3D.o
 	$(FC) $(FFLAGS) -o $@ $^
 
 read_binary: $(MODOBJS) $(SRC)/read_binary.o
 	$(FC) $(FFLAGS) -o $@ $^
 
-trace_cascade_2: $(MODOBJS) $(SRC)/trace_cascade_2.o
-	$(FC) $(FFLAGS) -o $@ $^
-
 # Program dependencies (ensure all the necessary .o files are there before trying to link)
 $(SRC)/read_binary.o:
-$(SRC)/inversion_cascade_1D.o: $(MODOBJS) $(STDOBJS)
-$(SRC)/trace_cascade_2.o: $(MODOBJS) $(STDOBJS)
+$(SRC)/inversion_cascade_1D.o: $(MODOBJS)
+$(SRC)/inversion_cascade_2D.o: $(MODOBJS) $(STDOBJS)
+$(SRC)/inversion_cascade_3D.o: $(MODOBJS) $(STDOBJS)
 
 # Module dependencies
 $(MODDIR)/randf.o: $(MODDIR)/kind_parameters.o
 $(MODDIR)/stochastics.o: $(MODDIR)/randf.o $(MODDIR)/kind_parameters.o $(MODDIR)/utilities.o
 $(MODDIR)/utilities.o: $(MODDIR)/kind_parameters.o
+$(MODDIR)/hashmap_utilities.o: $(MODDIR)/kind_parameters.o $(MODDIR)/utilities.o $(STDOBJS)
 
 # stdlib dependencies
 $(STDDIR)/stdlib_hashmaps.o: $(STDDIR)/stdlib_kinds.o $(STDDIR)/stdlib_hashmap_wrappers.o
