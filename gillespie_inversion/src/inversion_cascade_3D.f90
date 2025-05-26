@@ -137,98 +137,16 @@ pure function rates(x) result(r)
 	real(dp) :: r(n_reactions)
 	
 	! Oscillating
-	r(1) = 1._dp * lmbda(1) * hill(real(x(3), dp), k(1), n(1), c(1))
-	r(3) = 1._dp * lmbda(2) * hill(real(x(1), dp), k(2), n(2), c(2))
+	r(1) = 1._dp * lmbda(1) * hill(real(x(3), dp), k(1), n(1))
+	r(3) = 1._dp * lmbda(2) * hill(real(x(1), dp), k(2), n(2))
 
 	! f_3(x_2) doesn't change
-	r(5) = 1._dp * lmbda(3) * hill(real(x(2), dp), k(3), n(3), c(3))
+	r(5) = 1._dp * lmbda(3) * hill(real(x(2), dp), k(3), n(3))
 	! Linear decay doesn't change
 	r(2) = 1._dp * x(1) * beta(1)
 	r(4) = 1._dp * x(2) * beta(2)
 	r(6) = 1._dp * x(3) * beta(3)
 end function
-
-
-!subroutine update_hashmap(this, key, dt, r_channel)
-!! Put a new entry into the hashmap, or update an entry if it already exists
-!! Would love to make this general, but the derived type makes this difficult
-!	type(chaining_hashmap_type), intent(inout) :: this
-!	type(key_type), intent(in) :: key
-!	real(dp), intent(in) :: dt
-!	integer, intent(in) :: r_channel
-!	type(state_exits) :: new
-!	class(*), allocatable :: other
-!	logical :: key_exists
-	
-!	! Check key existence
-!	call this%key_test(key, key_exists)
-!	! If exists, update entry
-!	if (key_exists) then
-!	! other is polymorphic, so need to set type to work with it
-!		call this%get_other_data(key, other)
-!		select type (other)
-!		type is (state_exits)
-!			other%time_spent = other%time_spent + dt
-!			other%visit_count = other%visit_count + 1
-!			other%exit_count(event) = other%exit_count(r_channel) + 1
-!			call this%set_other_data(key, other)
-!		end select		
-!	! If doesn't exists, initialize new entry
-!	else
-!		new%time_spent = tstep
-!		new%visit_count = 1
-!		new%exit_count = 0
-!		new%exit_count(event) = 1
-!		call this%map_entry(key, new, conflict)
-!	end if
-!end subroutine
-
-
-!subroutine sort_keys(keys)
-!	type(key_type), intent(inout) :: keys(:)
-!	if (size(keys) > 1) then
-!		call quicksort_keys(keys, 1, size(keys))
-!	end if
-!end subroutine
-
-
-!subroutine quicksort_keys(keys, left, right)
-!	type(key_type), intent(inout) :: keys(:)
-!	integer, intent(in) :: left, right
-!	integer :: i, j
-!	type(key_type) :: temp
-!	integer, allocatable :: pivot(:), key_val(:)
-		
-!	if (left >= right) return
-	
-!	call get(keys((left + right) / 2), pivot)
-!	i = left
-!	j = right
-
-!	do
-!		call get(keys(i), key_val)
-!		do while (lex_less_than(key_val, pivot))
-!			i = i + 1
-!			call get(keys(i), key_val)
-!		end do
-!		call get(keys(j), key_val)
-!		do while (lex_less_than(pivot, key_val))
-!			j = j - 1
-!			call get(keys(j), key_val)
-!		end do
-!		if (i <= j) then
-!			temp = keys(i)
-!			keys(i) = keys(j)
-!			keys(j) = temp
-!			i = i + 1
-!			j = j - 1
-!		end if
-!		if (i > j) exit
-!	end do
-
-!	call quicksort_keys(keys, left, j)
-!	call quicksort_keys(keys, i, right)
-!end subroutine
 
 
 subroutine dump()

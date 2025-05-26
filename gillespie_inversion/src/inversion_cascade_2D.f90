@@ -10,19 +10,23 @@ use stdlib_hashmap_wrappers, only: key_type, set, get, &
 implicit none
 
 character(len=*), parameter :: fpath = "data/"
-character(len=*), parameter :: fname = "2D_linear"
+character(len=*), parameter :: fname = "2D_hill"
 
 real(dp), parameter :: eps=tiny(eps)
 
-integer, parameter :: event_min = 10**7
+integer, parameter :: event_min = 10**5
+
+real(dp), parameter :: tdisc = 0.1_dp
+real(dp) :: tnext = 0._dp
+integer :: xlast(2), q(2)
 
 ! System parameters ====================================================
 integer, parameter :: n_species = 2, n_reactions = 4
-real(dp), parameter :: lmbda(2) = [10._dp, 1._dp]
+real(dp), parameter :: lmbda(2) = [10._dp, 25._dp]
 real(dp), parameter :: beta(2) = [1._dp, 1._dp]
-real(dp), parameter :: k(2) = 10._dp
-real(dp), parameter :: n(2) = 2._dp
-real(dp), parameter :: c(2) = 0._dp
+real(dp), parameter :: k(2) = [2._dp, 4._dp]
+real(dp), parameter :: n(2) = [-2._dp, -2._dp]
+real(dp), parameter :: c(2) = [0._dp, 0._dp]
 integer, parameter, dimension(n_species, n_reactions) :: burst = reshape( & 
 	(/1, 0, & ! Reaction 1
 	-1, 0, &
@@ -86,11 +90,19 @@ do while (minval(event_count) < event_min)
 	call set(key, x)
 	call update_hashmap(state_map, key, tstep, event)
 		
+	if (t > tnext) then 
+		write(50,*) x - xlast
+		tnext = tnext + tdisc
+		xlast = x
+	end if
+	
 	! Update state of system in preparation for next step.
 	t = t + tstep
 	event_count(event) = event_count(event) + 1
 	x = x + burst(:,event)
 end do
+
+! SIMULATION DONE
 
 ! Get and sort all the keys (states visited)
 call state_map%get_all_keys(keys)
@@ -134,7 +146,7 @@ pure function rates(x) result (r)
 	
 	! Production rates
 	r(1) = 1._dp * lmbda(1)
-	r(3) = 1._dp * lmbda(2) * x(1)
+	r(3) = 1._dp * lmbda(2) * hill(real(x(1), dp), k(2), n(2))
 	
 	! Decay rates
 	r(2) = 1._dp * beta(1) * x(1)
