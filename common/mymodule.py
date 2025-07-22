@@ -1,9 +1,15 @@
 import numpy as np
-from matplotlib.backends.backend_pdf import PdfPages
+import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
+from matplotlib.backends.backend_pdf import PdfPages
+import seaborn as sns
 import warnings
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
+from tqdm import trange
 
+	
 eps = 1E-12
 
 # Root mean squared error normalized by the mean of the observed data, y.
@@ -35,14 +41,14 @@ def sigmoid(x):
 	return(1/(1 + np.exp(-x)))
 
 def reorder_vectors(vector1, vector2):
-    # Zip two vectors together, sort based on vector1, and unzip the result
-    sorted_pairs = sorted(zip(vector1, vector2))  # Sort based on the first vector
+	# Zip two vectors together, sort based on vector1, and unzip the result
+	sorted_pairs = sorted(zip(vector1, vector2))  # Sort based on the first vector
 
-    # Unzip into two separate sorted lists
-    sorted_vector1, sorted_vector2 = zip(*sorted_pairs)
+	# Unzip into two separate sorted lists
+	sorted_vector1, sorted_vector2 = zip(*sorted_pairs)
 
-    # Convert the tuples back to lists if needed
-    return list(sorted_vector1), list(sorted_vector2)
+	# Convert the tuples back to lists if needed
+	return list(sorted_vector1), list(sorted_vector2)
 
 # Read metadata for older files
 def read_metadata(fname):
@@ -211,4 +217,217 @@ def linear_thry(t, params):
 def funcL1(l2, etapp, mavg, pavg, tp, tm):
 	f = np.sqrt((etapp-1/(l2*pavg)) * l2*mavg * ((tp+l2*tm)/tm))
 	return (f)
+
+
+def load_hashtable_to_dataframe(filename):
+	''' For output of data from hashtables used in inversion_cascade_*.f90
+	From a sparse data set of coordinates and other dictionary
+	variables such as exits, probability, visits, etc. with metdata
+	create a data frame and a dictionary of the metadata. '''
+	metadata = {}
+	array_keys = {'Burst', 'lmbda', 'k', 'n', 'c', 'beta', 'x_mean', 'r_mean'}
+	data_lines = []
+	header = None
+
+	with open(filename, 'r') as f:
+		for line in f:
+			line = line.strip()
+			if line.startswith('#'):
+				# Parse metadata
+				if ':' in line:
+					key, value = line.lstrip('#').split(':', 1)
+					key = key.strip()
+					value = value.strip()
+					parts = value.split()
+					
+					if key in array_keys:
+						# Try float first, fallback to int
+						try:
+							metadata[key] = np.array([float(x) for x in parts])
+						except ValueError:
+							metadata[key] = np.array([int(x) for x in parts])
+					else:
+						# Try scalar float or int, fallback to string
+						try:
+							metadata[key] = float(value)
+						except ValueError:
+							metadata[key] = value
+			elif line == '':
+				continue
+			else:
+				if header is None:
+					# First non-comment, non-blank line is the header
+					header = line.split()
+				else:
+					data_lines.append(line.split())
+
+	# Convert data to a DataFrame
+	df = pd.DataFrame(data_lines, columns=header)
+	df = df.apply(pd.to_numeric)
+
+	return metadata, df
+
+
+def compute_rates_df(this, time):
+	'''Given exits probability and time, add rate columns to a df'''
+	# Extract exit_fields for calling whenever we need them.
+	exit_fields = [col for col in this.columns if col.startswith('exit')]
+
+	for i, exit_col in enumerate(exit_fields, start=1):
+		rate_col = f'rate{i}'
+		this[rate_col] = this[exit_col] / (this['probability'] * time)
+	
+	return(this, exit_fields)
+
+
+def forest_dependence_test(df, target_col, n_permutations=100, n_training=10, n_repeats=30, random_state=42):
+	from sklearn.ensemble import RandomForestRegressor
+	from sklearn.inspection import permutation_importance
+	from sklearn.utils import shuffle
+
+	""" Assess feature dependence using permutation importance and a null distribution.
+	
+	Returns: A DataFrame with importance, z-score, and empirical p-value per feature.
+	"""
+	rng = np.random.RandomState(random_state)
+	X = df.drop(columns=target_col)
+	y = df[target_col].values
+	
+	actual_importances = np.zeros((n_training, X.shape[1]))
+	
+	for i in range(n_training):
+		# Train on real data
+		model = RandomForestRegressor(n_estimators=200, min_samples_leaf=5, random_state=random_state+i)
+		model.fit(X,y)
+		result = permutation_importance(model, X, y, n_repeats=n_repeats, random_state=random_state)
+		actual_importances[i,:] = result.importances_mean
+		print(result.importances_mean)
+		
+	mean_importance = actual_importances.mean(axis=0)
+	print('mean:', mean_importance)
+	
+	# Get null distribution
+	null_importances = np.zeros((n_permutations, X.shape[1]))
+	
+	for i in range(n_permutations):
+		y_perm = shuffle(y, random_state=rng)
+		model_perm = RandomForestRegressor(n_estimators=200, min_samples_leaf=5, random_state=random_state+i)
+		model_perm.fit(X,y_perm)
+		perm_result = permutation_importance(model_perm, X, y_perm, n_repeats=n_repeats, random_state=random_state+i)
+		null_importances[i,:] = perm_result.importances_mean
+		print(perm_result.importances_mean)
+	
+	# Calculate z-scores and empirical p-values
+	null_mean = null_importances.mean(axis=0)
+	null_std = null_importances.std(axis=0)
+	# z_scores = (actual_importance - null_mean) / (null_std + 1e-9)
+	# p_values = np.mean(null_importances >= actual_importance[np.newaxis, :], axis=0)
+	z_scores = (mean_importance - null_mean) / (null_std + 1e-9)
+	p_values = np.mean(null_importances >= mean_importance[np.newaxis, :], axis=0)
+	
+	return pd.DataFrame({
+		'feature': X.columns,
+		# 'importance': actual_importance,
+		'importance': mean_importance,
+		'z_score': z_scores,
+		'p_value': p_values
+		}).sort_values(by='p_value')
+
+
+  # Create a unique sentinel
+_sentinel = object()
+def permutation_importance_test(train_df, features, targets, n_permutations, test_df=_sentinel, test_size=0.3, seed=42):
+	''' Asses feature dependence by comparing the performance of a
+	random forest model trained on a fraction of our data to the
+	remaining real data, and shuffled data. Idea is that if we can
+	shuffle our data and the model still performs well, the feature we
+	shuffled can not have been important to the target rate.
+	
+	INPUT our data as df, with features we want to test and target
+	rates we are interested in.
+	
+	RETURN a dataframe of our target and features with their baseline
+	error, mean_permutation error, std_permutation error, z_score, and
+	p_score.'''
+	
+	rng = np.random.default_rng(seed)
+	stats_dict = {}
+	error_dict = {}
+	
+	for target in targets:
+		X = train_df[features]
+		y = train_df[target].to_numpy()
+		# Make a test/training split if we don't provide training data
+		if (test_df is _sentinel):
+			X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=seed)
+		else:
+			X_train = X
+			y_train = y
+			X_test = test_df[features]
+			y_test = test_df[target].to_numpy()
+		# Make the model
+		model = RandomForestRegressor(n_estimators=200, random_state=seed)
+		model.fit(X_train, y_train)
+		# Get baseline prediction errors
+		# baseline_preds = model.predict(X_test)
+		# baseline_error = mean_squared_error(y_test, baseline_preds)
+		baseline_error = model.score(X_test, y_test)
+		
+		for feature in features:
+			perm_errors=[]			
+			for _ in trange(n_permutations, desc=f"{target}: permuting {feature}", leave=True):
+				# Copy and permute feature of interest
+				X_perm = X_test.copy()
+				X_perm[feature] = rng.permutation(X_perm[feature].values)
+				# Test model against shuffled test data
+				# preds = model.predict(X_perm)
+				# err = mean_squared_error(y_test, preds)
+				err = model.score(X_perm, y_test)
+				perm_errors.append(err)
+				
+			# Calculate statistics
+			perm_errors = np.array(perm_errors)
+			mean_perm = np.mean(perm_errors)
+			std_perm = np.std(perm_errors)
+			z_score = (baseline_error - mean_perm) / std_perm if std_perm > 0 else np.nan
+			p_value = np.mean(perm_errors >= baseline_error)
+			
+			# Keep statistics
+			key = (target, feature)
+			stats_dict[key] = {
+				'baseline_error': baseline_error,
+				'mean_perm_error': mean_perm,
+				'std_perm_error': std_perm,
+				'coeff_var': std_perm/mean_perm,
+				'z_score': z_score,
+				'p_value': p_value
+			}
+			
+			# Keep errors in dictionary for histogram plotting.
+			error_dict[(target, feature)] = perm_errors
+	return (stats_dict, error_dict)
+
+
+def plot_feature_permutation_histogram(ax, stats_dict, error_dict, target, feature, bins=30):
+	"""
+	Plot permutation error histogram for one target-feature on the given ax.
+	
+	Parameters:
+	- ax: matplotlib Axes object to plot on
+	- stats_df: DataFrame with baseline errors (indexed by target)
+	- error_dict: dict with keys (target, feature), values = permutation error arrays
+	- target: string, target variable name
+	- feature: string, feature name
+	- bins: int or array, histogram bins
+	"""
+	errors = error_dict.get((target, feature), None)
+	ax.hist(errors, bins=bins, density=True)
+
+	# Plot baseline error from stats_df
+	baseline = stats_dict[target, feature]['baseline_error']
+	ax.axvline(baseline, color='k', linestyle='--', linewidth=2, label='Baseline')
+
+	ax.set_title(f"Permutation Errors for {feature}")
+	# ax.set_xlabel("Error")
+	# ax.set_ylabel("Density")
 

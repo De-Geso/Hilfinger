@@ -10,7 +10,7 @@ use stdlib_hashmap_wrappers, only: key_type, set, get, &
 implicit none
 
 character(len=*), parameter :: fpath = "data/"
-character(len=*), parameter :: fname = "3D_oscillating"
+character(len=*), parameter :: fname = "3D_noise_controlling"
 
 real(dp), parameter :: eps=tiny(eps)
 
@@ -18,11 +18,11 @@ integer, parameter :: event_min = 10**6
 
 ! System parameters ====================================================
 integer, parameter :: n_species = 3, n_reactions = 6
-real(dp), parameter, dimension(n_species) :: lmbda = [500._dp, 80._dp, 80._dp]
-real(dp), parameter, dimension(n_species) :: beta = [1._dp, 1._dp, 1._dp]
-real(dp), parameter, dimension(n_species) :: k = [0.1_dp, 100._dp, 40._dp]
-real(dp), parameter, dimension(n_species) :: n = [-10._dp, 1._dp, 2._dp]
-real(dp), parameter, dimension(n_species) :: c = [0._dp, 0._dp, 0._dp]
+real(dp), parameter, dimension(n_species) :: lmbda = [50._dp, 3000._dp, 80._dp]
+real(dp), parameter, dimension(n_species) :: k = [0._dp, 10._dp, 40._dp]
+real(dp), parameter, dimension(n_species) :: n = [0._dp, -10._dp, 2._dp]
+real(dp), parameter, dimension(n_species) :: c = [0._dp, 8._dp, 0._dp]
+real(dp), parameter, dimension(n_species) :: beta = [1._dp/50, 1._dp, 1._dp]
 integer, parameter, dimension(n_species, n_reactions) :: burst = reshape( &
 	(/1, 0, 0, & ! Reaction 1
 	-1, 0, 0, &
@@ -71,6 +71,8 @@ allocate(rseed(nseed))
 call random_seed(get=rseed)
 		
 do while (minval(event_count) < event_min)
+	! write(1,*) event_count, x
+
 	! Update the propensity before taking a Gillespie step
 	! call update_propensity(propensity, x)
 	propensity = rates(x)
@@ -137,11 +139,24 @@ pure function rates(x) result(r)
 	real(dp) :: r(n_reactions)
 	
 	! Oscillating
-	r(1) = 1._dp * lmbda(1) * hill(real(x(3), dp), k(1), n(1))
+	! r(1) = 1._dp * lmbda(1) * hill(real(x(3), dp), k(1), n(1))
+	! r(3) = 1._dp * lmbda(2) * hill(real(x(1), dp), k(2), n(2))
+	
+	! Bistable
+	! r(1) = 1._dp * lmbda(1) * hill(real(x(2), dp), k(1), n(1)) + c(1)
+	! r(3) = 1._dp * x(1)
+
+	! Noise enhancing
+	! r(1) = 5
+	! r(3) = 1._dp * (lmbda(2) * hill(real(x(3),dp), k(2), n(2)) + c(2)*x(1))
+	
+	! Noise controlling
+	r(1) = 1._dp * lmbda(1) * x(3)
 	r(3) = 1._dp * lmbda(2) * hill(real(x(1), dp), k(2), n(2))
 
 	! f_3(x_2) doesn't change
 	r(5) = 1._dp * lmbda(3) * hill(real(x(2), dp), k(3), n(3))
+	
 	! Linear decay doesn't change
 	r(2) = 1._dp * x(1) * beta(1)
 	r(4) = 1._dp * x(2) * beta(2)
