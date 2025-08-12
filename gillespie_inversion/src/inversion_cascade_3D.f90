@@ -14,15 +14,15 @@ character(len=*), parameter :: fname = "3D_noise_controlling"
 
 real(dp), parameter :: eps=tiny(eps)
 
-integer, parameter :: event_min = 10**6
+integer, parameter :: event_min = 10**4
 
 ! System parameters ====================================================
 integer, parameter :: n_species = 3, n_reactions = 6
 real(dp), parameter, dimension(n_species) :: lmbda = [50._dp, 3000._dp, 80._dp]
 real(dp), parameter, dimension(n_species) :: k = [0._dp, 10._dp, 40._dp]
 real(dp), parameter, dimension(n_species) :: n = [0._dp, -10._dp, 2._dp]
-real(dp), parameter, dimension(n_species) :: c = [0._dp, 8._dp, 0._dp]
-real(dp), parameter, dimension(n_species) :: beta = [1._dp/50, 1._dp, 1._dp]
+real(dp), parameter, dimension(n_species) :: c = [0._dp, 0._dp, 0._dp]
+real(dp), parameter, dimension(n_species) :: beta = [1._dp/50., 1._dp, 1._dp]
 integer, parameter, dimension(n_species, n_reactions) :: burst = reshape( &
 	(/1, 0, 0, & ! Reaction 1
 	-1, 0, 0, &
@@ -48,18 +48,12 @@ integer :: i, j, nseed
 integer, allocatable :: rseed(:)
 
 ! Hashmap ==============================================================
-!type :: state_exits
-!	real(dp) :: time_spent
-!	integer :: visit_count
-!	integer :: exit_count(10*n_reactions)
-!end type state_exits
 type(chaining_hashmap_type) :: map
 type(key_type) :: key
 type(key_type), allocatable :: keys(:)
 type(state_exits) :: values
 class(*), allocatable :: retrieved
 logical :: conflict, key_exists
-
 
 ! Initialize hashmap
 call map%init(seeded_water_hasher)
@@ -71,7 +65,7 @@ allocate(rseed(nseed))
 call random_seed(get=rseed)
 		
 do while (minval(event_count) < event_min)
-	! write(1,*) event_count, x
+	! write(1,*) t, x
 
 	! Update the propensity before taking a Gillespie step
 	! call update_propensity(propensity, x)

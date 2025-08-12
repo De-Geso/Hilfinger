@@ -8,11 +8,11 @@ implicit none
 
 ! Program hyper parameters =============================================
 ! Number of events of each reaction before stopping.
-integer, parameter :: event_min = 10**6
+integer, parameter :: event_min = 10**7
 ! Maximum abundance in each direction
 ! integer, parameter, dimension(3) :: abund_max = [2**9, 2**7, 2**7]
 ! Maximum time lag for autocovariance.
-real(dp), parameter :: maxlag = 3._dp
+real(dp), parameter :: maxlag = 1._dp
 ! Discretization of time
 real(dp), parameter :: tdisc = 0.1_dp
 ! Number of points in autocovariance.
@@ -20,7 +20,7 @@ integer, parameter :: nacov = ceiling(maxlag/tdisc) + 1
 
 ! System parameters ====================================================
 ! Production rates
-real(dp), parameter, dimension(3) :: lmbda = [25._dp, 25._dp, 80._dp]
+real(dp), parameter, dimension(3) :: lmbda = [0._dp, 25._dp, 80._dp]
 ! Decay rates
 real(dp), parameter, dimension(3) :: beta = [1._dp, 1._dp, 1._dp]
 ! Hill function parameters
@@ -51,12 +51,10 @@ integer :: i, iter
 
 
 call random_seed()
-! do i = 1, 3
-!	call random_number(xx(i,1))
-!	call random_number(xx(i,2))
-!	xx(i,1) = 100._dp * xx(i,1)
-!	xx(i,2) = -10._dp * xx(i,2)
-! end do
+do i = 1, 3
+	call random_uniform(xx(i,1), 20._dp, 60._dp)
+	call random_uniform(xx(i,2), 1._dp, 8._dp)
+end do
 
 ! Initial guesses
 do i = 1, 3
@@ -65,7 +63,7 @@ end do
 
 write(*,*) yy
 
-call amoeba(xx, yy, 3, 2, 2, 1.E-6_dp, acov_SSE, iter)
+call amoeba(xx, yy, 3, 2, 2, 1.E-2_dp, acov_SSE, iter)
 
 write(*,*) iter
 write(*,*) "x, y, f(x)"
@@ -139,12 +137,8 @@ subroutine simulate_system(Axx, Ainx, Aoutx, guess_params)
 	
 	! Here the program begins ==============================================
 	
-	! call random_seed(put=seed)
-	call random_seed()
-	! Get random seed for output in metadata
-	call random_seed(size=nseed)
-	allocate(rseed(nseed))
-	call random_seed(get=rseed)
+	call random_seed(put=seed)
+	! call random_seed()
 		
 	xlast = x
 	
@@ -155,6 +149,7 @@ subroutine simulate_system(Axx, Ainx, Aoutx, guess_params)
 !				call exit()
 !			end if
 !		end do
+		write(*,*) x, event_count
 	
 		! Update the propensity before taking a Gillespie step
 		call update_propensity(propensity, x, lmbda, k, n, c, beta)
@@ -230,7 +225,7 @@ pure function guess_R(x, var1, var2) result(rate)
 	real(dp) :: rate(2)
 	
 	! Rate in
-	rate(1) = 1._dp * lmbda(3) * hill(x(2), var1, var2, c(3))
+	rate(1) = 1._dp * lmbda(3) * hill(real(x(2), dp), var1, var2)
 	! Rate out
 	rate(2) = 1._dp * beta(3) * x(3)
 end function
@@ -247,19 +242,19 @@ pure function production_rates(x, lmbda, k, n, c) result(rate)
 !	rate(3) = 1._dp * lmbda(3) * x(2)
 	
 	! PLOS R3+
-	rate(3) = 1._dp * lmbda(3) * hill(x(2), k(3), n(3), c(3))
+	rate(3) = 1._dp * lmbda(3) * hill(real(x(2), dp), k(3), n(3))
 	
 	! Bistable
 !	rate(1) = 1._dp * lmbda(1) * hill(x(2), k(1), n(1), c(1))
 !	rate(2) = 1._dp * x(1)
 	
 	! Oscillating
-!	rate(1) = 1._dp * lmbda(1) * hill_neg(x(3), k(1), n(1))
-!	rate(2) = 1._dp * lmbda(2) * hill_pos(x(1), k(2), n(2))
+!	rate(1) = 1._dp * lmbda(1) * hill(x(3), k(1), n(1), c(1))
+!	rate(2) = 1._dp * lmbda(2) * hill(x(1), k(2), n(2), c(2))
 
 	! Noise Enhancing
 	rate(1) = 5._dp
-	rate(2) = 1._dp * lmbda(2) * hill(x(3), k(2), n(2), c(2)*x(1))
+	rate(2) = 1._dp * lmbda(2) * hill(real(x(3), dp), k(2), n(2)) + c(2)*x(1)
 end function
 
 
@@ -307,24 +302,5 @@ pure function gradient(f, h, n) result (fx)
 		fx(i) = (f(i+1) - f(i-1)) / (2._dp*h)
 	end do
 end function
-
-
-!pure function hill_pos(x, k, n) result(f)
-!! Hill function. k and n controlled in system parameters.
-!	integer, intent(in) :: x
-!	real(dp), intent(in) :: k, n
-!	real(dp) :: f
-!	f = 1._dp * x**n / (x**n + k**n)	
-!end function
-
-
-!pure function hill_neg(x, k, n) result(f)
-!! Hill function. k and n controlled in system parameters.
-!	integer, intent(in) :: x
-!	real(dp), intent(in) :: k, n
-!	real(dp) :: f
-!	f = 1._dp / (1. + (x/k)**n)
-!end function
-
 
 end program

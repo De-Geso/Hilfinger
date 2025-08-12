@@ -8,5 +8,7 @@ doc/
 *.f90.o
 *.dat
 *.o
-# Fortran output files
+# Fortran output files. (If they were important I would have named them.)
 fort.*
+# Unignore res scripting.
+!res/*.py

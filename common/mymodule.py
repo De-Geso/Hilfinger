@@ -15,8 +15,8 @@ eps = 1E-12
 # Root mean squared error normalized by the mean of the observed data, y.
 def CVRMSE(y, f):
 	yavg = sum(y)/len(y)
-	RMSE = sum((y-f)**2)/len(y)
-	return ( RMSE/yavg )
+	RMSE = np.sqrt( sum((y-f)**2) / len(y) )
+	return ( abs(RMSE/yavg) )
 
 # R squared for observed y, and predicted f.
 def r2score(y, f):

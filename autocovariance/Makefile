@@ -1,133 +1,78 @@
-# Disable the default rules
 MAKEFLAGS += --no-builtin-rules --no-builtin-variables
 
-# Project name
+# Define color codes
+GREEN = '\033[0;32m'
+RED = '\033[0;31m'
+YELLOW = '\033[0;33m'
+RESET = '\033[0m'
 
-# Configuration settings
-FC := gfortran
-LD := $(FC)
-FFLAGS := -O3 -fopenmp
-LDLIBS :=
-LDFLAGS := -I/usr/include/ -O3 -fopenmp
+# Remove
 RM := rm -f
 
-# List of all source files
-PATHIN := src/
-BINDIR:= bin/
+# Directories
+SRC := src
+MODDIR := ../common
+STDDIR := ../common
+BINDIR := bin
 
-PROGS := mrna_gene.f90 \
-	mrna_protein_feedback.f90 \
-	mrna_protein_false_rates.f90 \
-	single_path_3D_discrete.f90 \
-	simplex_cascade_2_discrete.f90 \
-	simplex_cascade_3_discrete.f90 \
-	acov_discrete_cascade_2D.f90 \
-	acov_cascade_2D.f90
+# Compiler and flags
+FC := gfortran
+FFLAGS := -O3 -fopenmp -I$(MODDIR) -I$(STDDIR) -J$(BINDIR)
+LD := $(FC)
+LDFLAGS := -O3 -fopenmp
+LDLIBS :=
 
+# Sources
 MODS := kind_parameters.f90 \
-	init_mrna_gene.f90 \
-	mrna_protein_system_parameters.f90 \
 	randf.f90 \
-	utilities.f90 \
 	stochastics.f90 \
+	utilities.f90 \
 	nr_minmax.f90
 
-# Create lists of the build artefacts in this project
-MODSRCS := $(addprefix $(PATHIN), $(MODS))
-MODOBJS := $(addsuffix .o, $(MODSRCS))
+PROGS := single_path_3D_discrete.f90 \
+	simplex_cascade_3_discrete.f90
 
-PROGSRCS := $(addprefix $(PATHIN), $(PROGS))
-PROGOBJS := $(addsuffix .o, $(PROGSRCS))
 
-# Declare all public targets
+MODOBJS := $(MODS:%.f90=$(MODDIR)/%.o)
+STDOBJS := $(STDS:%.f90=$(STDDIR)/%.o)
+PROGOBJS := $(PROGS:%.f90=$(SRC)/%.o)
+TARGETS := $(PROGS:.f90=)
+
 .PHONY: all clean
 
-all: mrna_protein_false_rates single_path_3D_discrete simplex_cascade_2_discrete simplex_cascade_3_discrete acov_discrete_cascade_2D acov_cascade_2D# mrna_gene # mrna_protein_feedback
+# Rule for compiling modules
+$(MODDIR)/%.o: $(MODDIR)/%.f90
+	@echo -e $(YELLOW)Compiling $@$(RESET)
+	$(FC) $(FFLAGS) -c $< -o $@
 
-$(MODOBJS): %.o: %
-	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
+# Rule for compiling program sources
+$(SRC)/%.o: $(SRC)/%.f90 $(MODOBJS)
+	@echo -e $(YELLOW)Compiling $@$(RESET)
+	$(FC) $(FFLAGS) -c $< -o $@
 
-$(PROGOBJS): %.o: %
-	$(FC) $(LDFLAGS) -c -J$(BINDIR) -o $@ $< $(LDLIBS)
-
-
-single_path_3D_discrete: $(MODOBJS) src/single_path_3D_discrete.f90.o
+# Linking programs
+%: $(MODOBJS) $(SRC)/%.o
 	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-mrna_gene: $(MODOBJS) src/mrna_gene.f90.o
-	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+# All targets
+all: $(TARGETS)
 
-mrna_protein_feedback: $(MODOBJS) src/mrna_protein_feedback.f90.o
-	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+single_path_3D_discrete: $(MODOBJS) $(SRC)/single_path_3D_discrete.o
+	$(FC) $(FFLAGS) -o $@ $^
 
-mrna_protein_false_rates: $(MODOBJS) src/mrna_protein_false_rates.f90.o
-	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+simplex_cascade_3_discrete: $(MODOBJS) $(SRC)/simplex_cascade_3_discrete.o
+	$(FC) $(FFLAGS) -o $@ $^
 
-simplex_cascade_2_discrete: $(MODOBJS) src/simplex_cascade_2_discrete.f90.o
-	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+$(SRC)/simplex_cascade_3_discrete.o: $(MODOBJS)
+$(SRC)/single_path_3D_discrete.o: $(MODOBJS)
 
-simplex_cascade_3_discrete: $(MODOBJS) src/simplex_cascade_3_discrete.f90.o
-	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-acov_discrete_cascade_2D: $(MODOBJS) src/acov_discrete_cascade_2D.f90.o
-	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
+# Module dependencies
+$(MODDIR)/randf.o: $(MODDIR)/kind_parameters.o
+$(MODDIR)/stochastics.o: $(MODDIR)/randf.o $(MODDIR)/kind_parameters.o $(MODDIR)/utilities.o
+$(MODDIR)/utilities.o: $(MODDIR)/kind_parameters.o
+$(MODDIR)/nr_minmax.o: $(MODDIR)/kind_parameters.o
 
-acov_cascade_2D: $(MODOBJS) src/acov_cascade_2D.f90.o
-	$(LD) $(LDFLAGS) -o $@ $^ $(LDLIBS)
-
-	# Define dependencies between object files
-# Programs
-src/single_path_3D_discrete.f90.o: src/kind_parameters.f90.o src/stochastics.f90.o src/randf.f90.o
-
-src/mrna_gene.f90.o: src/kind_parameters.f90.o src/init_mrna_gene.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
-
-src/mrna_protein_feedback.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
-
-src/mrna_protein_false_rates.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o
-
-src/simplex_cascade_2_discrete.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o src/nr_minmax.f90.o
-
-src/simplex_cascade_3_discrete.f90.o: src/kind_parameters.f90.o src/mrna_protein_system_parameters.f90.o src/randf.f90.o src/utilities.f90.o src/nr_minmax.f90.o
-
-src/acov_discrete_cascade_2D.f90.o: src/kind_parameters.f90.o src/randf.f90.o src/utilities.f90.o src/stochastics.f90.o
-
-src/acov_cascade_2D.f90.o: src/kind_parameters.f90.o src/randf.f90.o src/utilities.f90.o src/stochastics.f90.o
-
-# Modules
-src/kind_parameters.f90.o:
-
-src/stochastics.f90.o: src/kind_parameters.f90.o
-
-src/mrna_protein_system_parameters.f90.o: src/kind_parameters.f90.o
-
-src/init_mrna_gene.f90.o: src/kind_parameters.f90.o
-
-src/randf.f90.o: src/kind_parameters.f90.o
-
-src/utilities.f90.o: src/kind_parameters.f90.o
-
-src/nr_minmax.f90.o: src/kind_parameters.f90.o
-
-# Run commands
-run_mrna_gene: mrna_gene
-	date
-	./mrna_gene
-
-run_mrna_protein_feedback: mrna_protein_feedback
-	date
-	./mrna_protein_feedback
-
-run_mrna_protein_false_rates: mrna_protein_false_rates
-	date
-	@if [ -z "$(l1)" ] || [ -z "$(l2)" ]; then \
-		echo "Usage: make run_mrna_protein_false_rates l1=<value> l2=<value>"; \
-	else \
-		./mrna_protein_false_rates $(l1) $(l2); \
-	fi
-
-# rebuild all object files in case this Makefile changes
-$(OBJS): $(MAKEFILE_LIST)
-
-# Cleanup, filter to avoid removing source code by accident
+# Clean up build files
 clean:
-	$(RM) $(filter %.o, $(MODOBJS), $(PROGOBJS)) $(wildcard *.mod)
+	$(RM) $(MODOBJS) $(STDOBJS) $(PROGOBJS) $(TARGETS) $(BINDIR)/*.mod
